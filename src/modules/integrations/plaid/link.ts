@@ -37,10 +37,9 @@ export async function createHostedLink(
   client: PlaidClient,
   env: Env,
   flowId: string,
-  kind: "bank" | "investment",
   token?: string,
 ) {
-  const body = hostedLinkRequest(env, flowId, kind, token);
+  const body = hostedLinkRequest(env, flowId, token);
   const link = await readPlaidResponse(LinkSchema, client.linkTokenCreate(body));
   assertHostedLinkOrigin(link.hosted_link_url);
   return link;
@@ -112,12 +111,7 @@ function itemCapabilities(products: string[]): Capability[] {
   return capabilities;
 }
 
-function hostedLinkRequest(
-  env: Env,
-  flowId: string,
-  kind: "bank" | "investment",
-  token?: string,
-): LinkTokenCreateRequest {
+function hostedLinkRequest(env: Env, flowId: string, token?: string): LinkTokenCreateRequest {
   return {
     client_name: "Personal Finance MCP",
     language: "en",
@@ -130,7 +124,7 @@ function hostedLinkRequest(
     },
     webhook: `${env.PUBLIC_ORIGIN}/webhooks/plaid`,
     hosted_link: hostedLinkSettings(env, flowId),
-    ...linkAccess(kind, token),
+    ...linkAccess(token),
     transactions: {
       days_requested: 730,
     },
@@ -146,36 +140,20 @@ function hostedLinkSettings(env: Env, flowId: string) {
     url_lifetime_seconds: 1800,
   };
 }
-function linkAccess(kind: "bank" | "investment", token: string | undefined) {
+function linkAccess(token: string | undefined) {
   if (token) {
     return {
       access_token: token,
     };
   }
   return {
-    products: requestedProducts(kind),
-    optional_products: optionalProducts(kind),
-  };
-}
-function requestedProducts(kind: "bank" | "investment"): Products[] {
-  if (kind === "bank") {
-    return [
+    products: [
       Products.Transactions,
-    ];
-  }
-  return [
-    Products.Investments,
-  ];
-}
-function optionalProducts(kind: "bank" | "investment"): Products[] {
-  if (kind === "bank") {
-    return [
+    ],
+    optional_products: [
       Products.Investments,
-    ];
-  }
-  return [
-    Products.Transactions,
-  ];
+    ],
+  };
 }
 function assertHostedLinkOrigin(target: string): void {
   const url = new URL(target);

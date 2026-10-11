@@ -69,9 +69,8 @@ function addInstitutionPanel(
 }
 function plaidLoginForm(owner: OwnerSession): HtmlTemplate {
   return html`<form class="add-option" method="post" action="/connections/plaid/start">${csrfInput(owner)}
-    <div><h3>Banks &amp; investments</h3><p>Securely connect through Plaid. Choose the kind of account you want to add.</p></div>
-    <label class="field">Account type <select name="kind"><option value="bank">Banking and credit cards</option><option value="investment">Investments and retirement</option></select></label>
-    <button>Connect through Plaid</button></form>`;
+    <div><h3>Banks &amp; investments</h3><p>Connect your institution through Plaid. Share the accounts you choose, including banking, credit cards, investments, and retirement.</p></div>
+    <button>Connect institution</button></form>`;
 }
 function benepassLoginForm(owner: OwnerSession, email?: string): HtmlTemplate {
   if (!email) {
@@ -176,7 +175,7 @@ function reconnectForm(connection: Connection, fields: HtmlTemplate): HtmlTempla
   if (!canReconnect(connection)) {
     return "";
   }
-  return html`<form method="post" action="/connections/plaid/start">${fields}<input type="hidden" name="kind" value="bank"><button class="secondary">Reconnect through Plaid</button></form>`;
+  return html`<form method="post" action="/connections/plaid/start">${fields}<button class="secondary">Reconnect through Plaid</button></form>`;
 }
 function connectionFields(owner: OwnerSession, connection: Connection): HtmlTemplate {
   return html`${csrfInput(owner)}<input type="hidden" name="connection_id" value="${connection.id}">`;

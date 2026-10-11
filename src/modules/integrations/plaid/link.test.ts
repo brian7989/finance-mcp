@@ -13,6 +13,83 @@ function linkResponse(url = "https://secure.plaid.com/hl/fixture") {
   };
 }
 describe("official Plaid SDK and Hosted Link", () => {
+  it("starts one flow for banking and investment accounts", async () => {
+    const bodies: unknown[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        bodies.push(await new Request(input, init).json());
+        return Response.json(linkResponse());
+      }),
+    );
+    await createHostedLink(createPlaidClient(env), env, crypto.randomUUID());
+    expect(bodies[0]).toMatchObject({
+      products: [
+        "transactions",
+      ],
+      optional_products: [
+        "investments",
+      ],
+      transactions: {
+        days_requested: 730,
+      },
+    });
+    expect(bodies[0]).not.toHaveProperty("access_token");
+  });
+  it.each([
+    {
+      products: [
+        "investments",
+      ],
+      capabilities: [
+        "balances",
+        "holdings",
+        "investment_activity",
+      ],
+    },
+    {
+      products: [
+        "transactions",
+        "investments",
+      ],
+      capabilities: [
+        "balances",
+        "transactions",
+        "holdings",
+        "investment_activity",
+      ],
+    },
+  ])("reads enabled capabilities for $products", async ({ products, capabilities }) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = new URL(new Request(input, init).url).pathname;
+        if (path === "/item/get") {
+          return Response.json({
+            item: {
+              item_id: "fixture-item",
+              institution_id: "fixture-institution",
+              products,
+              billed_products: products,
+              available_products: [],
+              consented_products: [
+                "transactions",
+                "investments",
+              ],
+            },
+          });
+        }
+        return Response.json({
+          institution: {
+            name: "Fixture institution",
+          },
+        });
+      }),
+    );
+    expect((await readItemDetails(createPlaidClient(env), "fixture-token")).capabilities).toEqual(
+      capabilities,
+    );
+  });
   it("uses update mode without requesting a replacement Item", async () => {
     const bodies: unknown[] = [];
     vi.stubGlobal(
@@ -26,7 +103,6 @@ describe("official Plaid SDK and Hosted Link", () => {
       createPlaidClient(env),
       env,
       crypto.randomUUID(),
-      "bank",
       "fixture-existing-token",
     );
     expect(bodies[0]).toMatchObject({
@@ -36,6 +112,7 @@ describe("official Plaid SDK and Hosted Link", () => {
       },
     });
     expect(bodies[0]).not.toHaveProperty("products");
+    expect(bodies[0]).not.toHaveProperty("optional_products");
   });
   it("does not treat consent for optional investments as product support", async () => {
     vi.stubGlobal(
@@ -82,7 +159,7 @@ describe("official Plaid SDK and Hosted Link", () => {
       vi.fn(async () => Response.json(linkResponse("https://attacker.example/hl/fixture"))),
     );
     await expect(
-      createHostedLink(createPlaidClient(env), env, crypto.randomUUID(), "bank"),
+      createHostedLink(createPlaidClient(env), env, crypto.randomUUID()),
     ).rejects.toThrow();
   });
   it("exchanges only server-retrieved results", async () => {

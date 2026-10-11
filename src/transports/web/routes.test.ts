@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import * as configurationModule from "../../config/env.js";
 import { readConfiguration } from "../../config/env.js";
 import { requireOwnerSession, saveOwnerSession } from "../../modules/auth/session.js";
 import { createWebRouter } from "./routes.js";
@@ -8,6 +9,7 @@ const origin = configuration.PUBLIC_ORIGIN;
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 async function signedOwner() {
@@ -53,10 +55,25 @@ describe("Hono browser routes", () => {
     const response = await webFetch("/connections/plaid/start", {
       method: "POST",
       headers: formHeaders(""),
-      body: "kind=bank&csrf=wrong",
+      body: "csrf=wrong",
     });
     expect(response.status).toBe(400);
     expect(fetch).not.toHaveBeenCalled();
+  });
+  it("starts a combined Plaid flow without an account mode field", async () => {
+    const { cookie, owner } = await signedOwner();
+    const beginPlaidLink = vi.fn(async () => "https://secure.plaid.com/hl/fixture");
+    vi.spyOn(configurationModule, "ownerStore").mockReturnValue({
+      beginPlaidLink,
+    } as unknown as ReturnType<typeof configurationModule.ownerStore>);
+    const response = await webFetch("/connections/plaid/start", {
+      method: "POST",
+      headers: formHeaders(cookie),
+      body: `csrf=${owner.csrf}`,
+    });
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("https://secure.plaid.com/hl/fixture");
+    expect(beginPlaidLink).toHaveBeenCalledExactlyOnceWith(undefined);
   });
   it("rejects cross-origin and invalid-CSRF forms without clearing the session", async () => {
     const { cookie, owner } = await signedOwner();

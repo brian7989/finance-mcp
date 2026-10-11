@@ -29,20 +29,13 @@ export async function linkBenepass(context: FinanceContext): Promise<void> {
 }
 export async function beginPlaidLink(
   context: FinanceContext,
-  kind: "bank" | "investment",
   connectionId?: string,
 ): Promise<string> {
-  validateLinkInput(context, kind);
+  validateLinkConfiguration(context);
   const flowId = crypto.randomUUID();
   const connection = connectionId ? requireConnection(context.db, connectionId) : undefined;
   const token = connection ? await readReconnectCredential(context, connection) : undefined;
-  const link = await createHostedLink(
-    createPlaidClient(context.env),
-    context.env,
-    flowId,
-    kind,
-    token,
-  );
+  const link = await createHostedLink(createPlaidClient(context.env), context.env, flowId, token);
   saveLink(context.db, {
     id: flowId,
     token: link.link_token,
@@ -107,11 +100,7 @@ async function readReconnectCredential(
   return readPlaidCredential(context, connection);
 }
 
-function validateLinkInput(context: FinanceContext, kind: string): void {
-  z.enum([
-    "bank",
-    "investment",
-  ]).parse(kind);
+function validateLinkConfiguration(context: FinanceContext): void {
   z.string()
     .regex(/^[a-f0-9]{64}$/)
     .parse(context.env.DATA_KEY);

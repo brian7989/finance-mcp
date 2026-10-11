@@ -95,8 +95,8 @@ export class FinanceStore extends DurableObject<Env> {
   async linkBenepass(): Promise<void> {
     await linkBenepass(this.context);
   }
-  async beginPlaidLink(kind: "bank" | "investment", connectionId?: string): Promise<string> {
-    return beginPlaidLink(this.context, kind, connectionId);
+  async beginPlaidLink(connectionId?: string): Promise<string> {
+    return beginPlaidLink(this.context, connectionId);
   }
   async completePlaidLink(id: string): Promise<void> {
     return coalesce(this.completing, id, async () => {

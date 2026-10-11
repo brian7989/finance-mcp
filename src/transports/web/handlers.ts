@@ -47,9 +47,8 @@ export async function completePlaidLink(context: WebContext): Promise<Response> 
   return redirectToConnections();
 }
 export async function startPlaidLink(context: WebContext): Promise<Response> {
-  const kind = readAccountKind(context.var.form);
   const id = context.var.form.get("connection_id") ?? undefined;
-  const url = await ownerStore(context.env).beginPlaidLink(kind, id);
+  const url = await ownerStore(context.env).beginPlaidLink(id);
   return Response.redirect(url, 302);
 }
 export async function startBenepassLogin(context: WebContext): Promise<Response> {
@@ -85,14 +84,6 @@ async function findOwner(context: WebContext) {
   } catch {
     return undefined;
   }
-}
-function readAccountKind(form: URLSearchParams) {
-  return z
-    .enum([
-      "bank",
-      "investment",
-    ])
-    .parse(form.get("kind"));
 }
 function readLoginCode(form: URLSearchParams): string {
   return z

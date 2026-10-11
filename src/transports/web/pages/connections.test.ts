@@ -50,6 +50,9 @@ describe("escaped financial templates", () => {
     expect(response.headers.get("content-security-policy")).toContain(`style-src 'sha256-${hash}'`);
     expect(response.headers.get("content-security-policy")).not.toContain("unsafe-inline");
     expect(body).not.toContain("<script>");
+    expect(body).toContain("Connect institution");
+    expect(body).not.toContain('name="kind"');
+    expect(body).not.toContain("<select");
     expect(body).toContain("&lt;script&gt;");
     expect(body).not.toContain('value="" autofocus');
     expect(body).toContain('action="/connections/disconnect"');
