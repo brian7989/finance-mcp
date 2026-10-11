@@ -36,6 +36,68 @@ async function seedStore(stub: ReturnType<typeof testStore>): Promise<void> {
   });
 }
 describe("durable finance history", () => {
+  it("retires a combined HSA account without losing history or counting it twice", async () => {
+    const stub = testStore();
+    const parent = {
+      ...fixtureAccount("benepass/workspace/hsa", "hsa"),
+      connection_id: "benepass",
+      provider_account_id: "hsa",
+      name: "Benepass HSA",
+    };
+    const components = [
+      "cash",
+      "investments",
+    ].map((component) => ({
+      ...parent,
+      id: `${parent.id}/${component}`,
+      provider_account_id: `hsa/${component}`,
+      name: `HSA ${component}`,
+    }));
+    await runInDurableObject(stub, async (_instance, context) => {
+      const db = createDatabase(context.storage);
+      saveConnection(
+        db,
+        {
+          ...fixtureConnection("benepass"),
+          provider: "benepass",
+          institution: "Benepass",
+          last_success_at: new Date().toISOString(),
+        },
+        null,
+      );
+      context.storage.transactionSync(() =>
+        saveSnapshot(db, "benepass", {
+          accounts: [
+            parent,
+          ],
+          balances: [
+            fixtureBalance(parent.id, "7103.09", new Date().toISOString()),
+          ],
+          holdings: [],
+        }),
+      );
+      context.storage.transactionSync(() =>
+        saveSnapshot(db, "benepass", {
+          accounts: components,
+          balances: [
+            fixtureBalance(components[0]?.id, "100", new Date().toISOString()),
+            fixtureBalance(components[1]?.id, "7003.09", new Date().toISOString()),
+          ],
+          holdings: [],
+        }),
+      );
+    });
+    const accounts = (await stub.accounts()).accounts;
+    expect(accounts.filter((account) => account.active)).toHaveLength(2);
+    expect(accounts.find((account) => account.provider_account_id === "hsa")?.active).toBe(false);
+    expect((await stub.netWorth()).totals).toEqual([
+      {
+        currency: "USD",
+        amount: "7103.09",
+      },
+    ]);
+    expect((await stub.balanceHistory({})).observations).toHaveLength(3);
+  });
   it("retains daily observations after eviction and replaces same-day readings", async () => {
     const stub = testStore();
     await seedStore(stub);

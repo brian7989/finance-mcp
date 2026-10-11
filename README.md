@@ -2,7 +2,7 @@
 
 A private, read-only connector that lets an AI assistant understand your financial accounts across institutions.
 
-Plaid connects supported banks, credit cards, brokerages, and retirement accounts. A direct Benepass integration provides HSA cash and investments. Exact institution and account coverage depends on the provider connection.
+Plaid connects supported banks, credit cards, brokerages, and retirement accounts. A direct Benepass integration shows HSA cash and investments separately. Investment balances include brokerage cash; holdings are their breakdown. Account suffixes appear only when verified account numbers are available. Exact institution and account coverage depends on the provider connection.
 
 The connector saves daily balance observations, banking transactions, and investment activity. Balances include retrieval timestamps, missing data stays unknown, and totals remain separate by currency. Investment holdings are never added to an account balance twice. Net-worth results flag missing values, unavailable connections, and observations retrieved more than 36 hours ago; a recent retrieval does not guarantee a live market valuation.
 
