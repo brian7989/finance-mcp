@@ -47,7 +47,7 @@ Point compatible remote MCP clients at `${PUBLIC_ORIGIN}/mcp`. The server uses S
 
 ## History and refreshes
 
-The daily Cron Trigger runs at 09:17 UTC. Verified Plaid webhooks also schedule refreshes. One institution is processed per alarm invocation; refreshes for the same connection are coalesced.
+Daily refreshes start at midnight Pacific (America/Los_Angeles). Cloudflare triggers at 07:00 and 08:00 UTC; the Worker runs only the trigger that falls at local midnight, accounting for daylight saving time. Verified Plaid webhooks also schedule refreshes. One institution is processed per alarm invocation; refreshes for the same connection are coalesced.
 
 Balance history starts with the first successful observation, keeping the latest observation for each UTC day. Banking history can backfill up to the amount authorized and returned by Plaid; investment activity initially backfills up to two years. Later refreshes reread a 90-day overlap and extend it to cover time since the previous successful refresh, bounded by two years. Corrections older than that refresh window require a separate backfill. No prior daily balance history is invented. Benepass currently provides HSA balances and holdings; its transaction history is not normalized without a verified account mapping.
 

@@ -6,6 +6,17 @@ import {
 import { syncJobs } from "../../../database/schema.js";
 import type { FinanceContext } from "../context.js";
 
+const pacificTime = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/Los_Angeles",
+  hourCycle: "h23",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+export function isPacificMidnight(timestamp: number): boolean {
+  return pacificTime.format(timestamp) === "00:00";
+}
+
 export async function scheduleAllConnections(context: FinanceContext): Promise<void> {
   const connections = listStoredConnections(context.db).filter(
     (value) => value.status === "connected",

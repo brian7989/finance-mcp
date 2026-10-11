@@ -1,5 +1,6 @@
 import { AuthorizationError, OAuthProvider } from "@cloudflare/workers-oauth-provider";
 import { type Configuration, type Env, ownerStore, readConfiguration } from "./config/env.js";
+import { isPacificMidnight } from "./modules/finance/sync/scheduling.js";
 import { serveMcp } from "./transports/mcp/server.js";
 import { errorPage } from "./transports/web/pages/consent.js";
 import { htmlResponse } from "./transports/web/pages/layout.js";
@@ -39,8 +40,10 @@ export default {
       return safeFailure(error);
     }
   },
-  async scheduled(_event: ScheduledController, env: Env): Promise<void> {
-    await ownerStore(env).scheduleSync();
+  async scheduled(event: ScheduledController, env: Env): Promise<void> {
+    if (isPacificMidnight(event.scheduledTime)) {
+      await ownerStore(env).scheduleSync();
+    }
   },
 } satisfies ExportedHandler<Env>;
 
