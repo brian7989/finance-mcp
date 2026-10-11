@@ -12,7 +12,7 @@ export async function htmlResponse(
   headers.set("cache-control", "no-store");
   headers.set(
     "content-security-policy",
-    "default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+    "default-src 'none'; form-action 'self' https://secure.plaid.com; frame-ancestors 'none'; base-uri 'none'",
   );
   headers.set("x-frame-options", "DENY");
   headers.set("x-content-type-options", "nosniff");

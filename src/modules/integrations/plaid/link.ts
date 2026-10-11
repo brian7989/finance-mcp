@@ -1,6 +1,6 @@
 import { CountryCode, type LinkTokenCreateRequest, Products } from "plaid";
 import * as z from "zod";
-import type { Env } from "../../../config/env.js";
+import { type Env, normalizeEmail } from "../../../config/env.js";
 import type { Capability } from "../../finance/schemas.js";
 import type { PlaidClient } from "./client.js";
 import { readPlaidResponse } from "./client.js";
@@ -121,7 +121,7 @@ function hostedLinkRequest(
       CountryCode.Ca,
     ],
     user: {
-      client_user_id: z.string().min(1).parse(env.OWNER_EMAIL),
+      client_user_id: plaidUserId(env),
     },
     webhook: `${env.PUBLIC_ORIGIN}/webhooks/plaid`,
     hosted_link: hostedLinkSettings(env, flowId),
@@ -130,6 +130,10 @@ function hostedLinkRequest(
       days_requested: 730,
     },
   };
+}
+function plaidUserId(env: Env): string {
+  const email = z.email().transform(normalizeEmail).parse(env.OWNER_EMAIL);
+  return env.FINANCE_STORE.idFromName(email).toString();
 }
 function hostedLinkSettings(env: Env, flowId: string) {
   return {

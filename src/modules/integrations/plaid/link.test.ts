@@ -31,6 +31,9 @@ describe("official Plaid SDK and Hosted Link", () => {
     );
     expect(bodies[0]).toMatchObject({
       access_token: "fixture-existing-token",
+      user: {
+        client_user_id: env.FINANCE_STORE.idFromName(env.OWNER_EMAIL ?? "").toString(),
+      },
     });
     expect(bodies[0]).not.toHaveProperty("products");
   });

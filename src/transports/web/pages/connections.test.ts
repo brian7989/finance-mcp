@@ -39,6 +39,9 @@ describe("escaped financial templates", () => {
       ),
     );
     expect(response.headers.get("referrer-policy")).toBe("same-origin");
+    expect(response.headers.get("content-security-policy")).toContain(
+      "form-action 'self' https://secure.plaid.com;",
+    );
     const body = await response.text();
     expect(body).not.toContain("<script>");
     expect(body).toContain("&lt;script&gt;");
