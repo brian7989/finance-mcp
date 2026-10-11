@@ -105,6 +105,10 @@ describe("real Workers OAuth and MCP transport", {
     });
     const consent = await workerFetch(`${origin}/authorize?${query}`);
     expect(consent.status).toBe(200);
+    const policy = consent.headers.get("content-security-policy");
+    expect(policy).toContain("https://identity.example.com");
+    expect(policy).toContain("https://client.example");
+    expect(policy).not.toContain("https://attacker.example");
     const body = await consent.text();
     const handle = body.match(/name="handle" value="([^"]+)"/)?.[1];
     expect(handle).toBeDefined();

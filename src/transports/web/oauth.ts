@@ -11,11 +11,18 @@ import { saveOwnerSession } from "../../modules/auth/session.js";
 import { consentPage } from "./pages/consent.js";
 import { htmlResponse } from "./pages/layout.js";
 
-export async function showConsent(request: Request, env: Env): Promise<Response> {
+export async function showConsent(
+  request: Request,
+  env: Env,
+  configuration: Configuration,
+): Promise<Response> {
   const original = await env.OAUTH_PROVIDER.parseAuthRequest(request);
   const details = await env.OAUTH_PROVIDER.describeConsent(original);
   const consent = await env.OAUTH_PROVIDER.beginConsent(original);
-  return htmlResponse(consentPage(details, consent.handle), consent.headers);
+  return htmlResponse(consentPage(details, consent.handle), consent.headers, 200, [
+    configuration.ACCESS_ISSUER,
+    original.redirectUri,
+  ]);
 }
 export async function approveOrDeny(
   request: Request,

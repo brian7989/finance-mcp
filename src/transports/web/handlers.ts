@@ -32,7 +32,7 @@ export async function showConnections(context: WebContext): Promise<Response> {
   );
 }
 export async function showConsentPage(context: WebContext): Promise<Response> {
-  return showConsent(context.req.raw, context.env);
+  return showConsent(context.req.raw, context.env, context.var.configuration);
 }
 export async function submitConsent(context: WebContext): Promise<Response> {
   return approveOrDeny(context.req.raw, context.env, context.var.configuration, context.var.form);
