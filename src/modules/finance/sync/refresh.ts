@@ -124,6 +124,25 @@ function reportSyncFailure(error: unknown): void {
           code,
           path,
         }))
-      : (errorCode(error) ?? "UNEXPECTED_ERROR");
+      : (errorCode(error) ?? unexpectedFailureDetails(error));
   console.error("finance-mcp: sync failed", details);
+}
+
+function unexpectedFailureDetails(error: unknown) {
+  if (!(error instanceof Error)) {
+    return "UNEXPECTED_ERROR";
+  }
+  const knownMessages: Record<string, string> = {
+    "Provider referenced an unknown account": "UNKNOWN_SNAPSHOT_ACCOUNT",
+    "Investment activity page limit reached": "INVESTMENT_PAGE_LIMIT",
+    "[big.js] Invalid number": "INVALID_DECIMAL",
+  };
+  return {
+    code: knownMessages[error.message] ?? "UNEXPECTED_ERROR",
+    type: error.name,
+    frames: error.stack
+      ?.split("\n")
+      .slice(1, 5)
+      .map((frame) => frame.match(/at ([\w.$]+)/)?.[1] ?? "anonymous"),
+  };
 }

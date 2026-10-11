@@ -1,6 +1,7 @@
 import type * as z from "zod";
+import { SchemaError } from "../../../../common/errors.js";
 import type { Holding, Transaction } from "../../../finance/schemas.js";
-import { decimal } from "../../../finance/services/money.js";
+import { addAmounts, decimal } from "../../../finance/services/money.js";
 import type { InvestmentChanges } from "../../provider.js";
 import { type PlaidClient, readPlaidResponse } from "../client.js";
 import { HoldingsResponseSchema, InvestmentActivityResponseSchema } from "../schemas.js";
@@ -35,9 +36,37 @@ export async function readPlaidHoldings(
     ]),
   );
   const fetchedAt = new Date().toISOString();
-  return data.holdings.map((holding) =>
+  const lots = data.holdings.map((holding) =>
     mapPlaidHolding(holding, securities.get(holding.security_id), connectionId, fetchedAt),
   );
+  return combineHoldingLots(lots);
+}
+function combineHoldingLots(lots: Holding[]): Holding[] {
+  const positions = new Map<string, Holding>();
+  for (const lot of lots) {
+    const previous = positions.get(lot.id);
+    positions.set(lot.id, previous ? combineHoldingPosition(previous, lot) : lot);
+  }
+  return [
+    ...positions.values(),
+  ];
+}
+function combineHoldingPosition(previous: Holding, lot: Holding): Holding {
+  if (previous.currency !== lot.currency) {
+    throw new SchemaError("Holding lots have inconsistent currencies");
+  }
+  return {
+    ...previous,
+    quantity: addKnownAmounts(previous.quantity, lot.quantity),
+    value: addKnownAmounts(previous.value, lot.value),
+    price_as_of: previous.price_as_of === lot.price_as_of ? previous.price_as_of : null,
+  };
+}
+function addKnownAmounts(left: string | null, right: string | null): string | null {
+  if (left === null || right === null) {
+    return null;
+  }
+  return addAmounts(left, right);
 }
 function mapPlaidHolding(
   holding: ProviderHolding,
