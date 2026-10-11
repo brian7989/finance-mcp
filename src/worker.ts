@@ -1,12 +1,12 @@
 import { AuthorizationError, OAuthProvider } from "@cloudflare/workers-oauth-provider";
-import { handleAuthorization } from "./auth/authorization.js";
-import { errorPage, htmlResponse } from "./auth/pages.js";
-import { type Configuration, type Env, ownerStore, readConfiguration } from "./config.js";
-import { serveMcp } from "./mcp/server.js";
-import { handlePlaidWebhook } from "./providers/plaid/webhooks.js";
+import { type Configuration, type Env, ownerStore, readConfiguration } from "./config/env.js";
+import { handleAuthorization } from "./modules/auth/oauth/authorization.js";
+import { errorPage, htmlResponse } from "./modules/auth/oauth/pages.js";
+import { handlePlaidWebhook } from "./modules/integrations/plaid/webhooks.js";
+import { serveMcp } from "./transports/mcp/server.js";
 
-export { BenepassSession } from "./providers/benepass/session.js";
-export { FinanceStore } from "./storage/finance-store.js";
+export { FinanceStore } from "./database/finance-store.js";
+export { BenepassSession } from "./modules/integrations/benepass/auth/session.js";
 
 export default {
   async fetch(request: Request, env: Env, context: ExecutionContext): Promise<Response> {

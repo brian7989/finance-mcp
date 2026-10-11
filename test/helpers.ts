@@ -1,6 +1,6 @@
 import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import type { BenepassSession } from "../src/providers/benepass/session.js";
+import type { BenepassSession } from "../src/modules/integrations/benepass/auth/session.js";
 
 export function testSession(): DurableObjectStub<BenepassSession> {
   return env.BENEPASS_SESSION.getByName(crypto.randomUUID());

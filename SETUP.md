@@ -13,7 +13,7 @@ Tests use synthetic data in Cloudflare's local runtime and never require bank cr
 
 The official Plaid SDK handles API requests through Axios’s Workers-compatible fetch adapter. openid-client handles upstream OIDC, big.js handles decimal arithmetic, and Drizzle manages typed SQLite queries and versioned migrations. Provider adapters normalize institution data; connection workflows, refresh scheduling, and storage repositories stay separate.
 
-After changing `src/storage/schema.ts`, run `pnpm db:generate`, review the generated SQL, and register its import in `src/storage/migrations.ts`. Commit the migration and Drizzle metadata together. Migrations run when the Durable Object starts; the initial migration also adopts the previous schema without deleting history.
+After changing `src/database/schema.ts`, run `pnpm db:generate`, review the generated SQL, and register its import in `src/database/migrations.ts`. Commit the migration and Drizzle metadata together. Migrations run when the Durable Object starts; the initial migration also adopts the previous schema without deleting history.
 
 ## Cloudflare configuration
 

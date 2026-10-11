@@ -1,4 +1,4 @@
-import type { Account, Balance, Connection, Transaction } from "../src/finance/schemas.js";
+import type { Account, Balance, Connection, Transaction } from "../src/modules/finance/schemas.js";
 
 export function fixtureConnection(id = "plaid/item_1"): Connection {
   return {
