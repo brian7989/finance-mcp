@@ -39,6 +39,8 @@ export function registerNetWorth(register: RegisterTool, env: Env): void {
       ),
       missing_account_ids: z.array(z.string()),
       complete: z.boolean(),
+      observations_fresh: z.boolean(),
+      stale_account_ids: z.array(z.string()),
       unavailable_connection_ids: z.array(z.string()),
       fetched_at: z.iso.datetime(),
       balance_observations: z.array(BalanceSchema),

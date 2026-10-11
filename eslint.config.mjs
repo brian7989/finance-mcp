@@ -12,6 +12,7 @@ export default defineConfig(
       "src/**/*.ts",
       "test/**/*.ts",
       "vitest.config.ts",
+      "drizzle.config.ts",
       "eslint.config.mjs",
     ],
     languageOptions: {

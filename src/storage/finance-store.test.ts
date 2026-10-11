@@ -10,6 +10,7 @@ import {
 import { saveSnapshot } from "./accounts.js";
 import { readSyncCursor, saveConnection } from "./connections.js";
 import { encryptCredential } from "./credentials.js";
+import { createDatabase } from "./database.js";
 import { saveTransactionChanges } from "./transactions.js";
 
 afterEach(() => {
@@ -22,8 +23,8 @@ function testStore() {
 async function seedStore(stub: ReturnType<typeof testStore>): Promise<void> {
   const credential = await encryptCredential(env, "plaid/item_1", "fixture-access");
   await runInDurableObject(stub, async (_instance, context) => {
-    saveConnection(context.storage.sql, fixtureConnection(), credential);
-    saveSnapshot(context.storage.sql, "plaid/item_1", {
+    saveConnection(createDatabase(context.storage), fixtureConnection(), credential);
+    saveSnapshot(createDatabase(context.storage), "plaid/item_1", {
       accounts: [
         fixtureAccount(),
       ],
@@ -39,7 +40,7 @@ describe("durable finance history", () => {
     const stub = testStore();
     await seedStore(stub);
     await runInDurableObject(stub, async (_instance, context) => {
-      saveSnapshot(context.storage.sql, "plaid/item_1", {
+      saveSnapshot(createDatabase(context.storage), "plaid/item_1", {
         accounts: [
           fixtureAccount(),
         ],
@@ -71,7 +72,7 @@ describe("durable finance history", () => {
     await seedStore(stub);
     await runInDurableObject(stub, async (_instance, context) => {
       context.storage.transactionSync(() =>
-        saveTransactionChanges(context.storage.sql, "plaid/item_1", {
+        saveTransactionChanges(createDatabase(context.storage), "plaid/item_1", {
           transactions: [
             fixtureTransaction("a"),
             fixtureTransaction("b"),
@@ -81,7 +82,7 @@ describe("durable finance history", () => {
         }),
       );
       context.storage.transactionSync(() =>
-        saveTransactionChanges(context.storage.sql, "plaid/item_1", {
+        saveTransactionChanges(createDatabase(context.storage), "plaid/item_1", {
           transactions: [
             {
               ...fixtureTransaction("a"),
@@ -94,10 +95,10 @@ describe("durable finance history", () => {
           cursor: "second",
         }),
       );
-      expect(readSyncCursor(context.storage.sql, "plaid/item_1")).toBe("second");
+      expect(readSyncCursor(createDatabase(context.storage), "plaid/item_1")).toBe("second");
       expect(() =>
         context.storage.transactionSync(() => {
-          saveTransactionChanges(context.storage.sql, "plaid/item_1", {
+          saveTransactionChanges(createDatabase(context.storage), "plaid/item_1", {
             transactions: [],
             removed: [
               "a",
@@ -107,7 +108,7 @@ describe("durable finance history", () => {
           throw new Error("rollback");
         }),
       ).toThrow();
-      expect(readSyncCursor(context.storage.sql, "plaid/item_1")).toBe("second");
+      expect(readSyncCursor(createDatabase(context.storage), "plaid/item_1")).toBe("second");
     });
     await evictDurableObject(stub);
     expect((await stub.transactions({})).transactions).toHaveLength(1);
@@ -122,12 +123,16 @@ describe("durable finance history", () => {
       include_in_net_worth: false,
       include_in_spending: false,
     };
+    const originalId = (await stub.accounts()).accounts[0]?.id;
+    expect(originalId).not.toBe(fixtureAccount().id);
     await stub.setPreference(preference);
     await seedStore(stub);
     await evictDurableObject(stub);
-    expect((await stub.accounts()).preferences).toEqual([
-      preference,
-    ]);
+    expect((await stub.accounts()).accounts[0]?.id).toBe(originalId);
+    expect((await stub.accounts()).preferences[0]).toMatchObject({
+      ...preference,
+      account_id: (await stub.accounts()).accounts[0]?.id,
+    });
     await runInDurableObject(stub, async (instance) => {
       await expect(
         instance.setPreference({
@@ -137,6 +142,59 @@ describe("durable finance history", () => {
       ).rejects.toThrow();
     });
   });
+  it("recovers metadata after a temporary provider failure", async () => {
+    const stub = testStore();
+    await seedStore(stub);
+    let unavailable = true;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = new URL(new Request(input, init).url).pathname;
+        if (path === "/item/get") {
+          if (unavailable) {
+            return Response.json(
+              {
+                error_code: "INTERNAL_SERVER_ERROR",
+              },
+              {
+                status: 500,
+              },
+            );
+          }
+          return Response.json({
+            item: {
+              item_id: "item_1",
+              institution_id: null,
+              billed_products: [
+                "transactions",
+              ],
+              available_products: [],
+            },
+          });
+        }
+        if (path === "/accounts/get") {
+          return Response.json({
+            accounts: [
+              fixturePlaidAccount(),
+            ],
+          });
+        }
+        return Response.json({
+          added: [],
+          modified: [],
+          removed: [],
+          next_cursor: "recovered",
+          has_more: false,
+        });
+      }),
+    );
+    expect((await stub.syncConnection("plaid/item_1")).ok).toBe(false);
+    expect((await stub.connections()).connections[0]?.last_error).not.toBeNull();
+    unavailable = false;
+    expect((await stub.syncConnection("plaid/item_1")).ok).toBe(true);
+    expect((await stub.connections()).connections[0]?.last_error).toBeNull();
+    expect((await stub.connections()).connections[0]?.capabilities).toContain("transactions");
+  });
   it("coalesces concurrent refreshes and never exposes stored credentials", async () => {
     const stub = testStore();
     await seedStore(stub);
@@ -144,7 +202,20 @@ describe("durable finance history", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: string | URL) => {
-        if (String(input).endsWith("/accounts/get")) {
+        const url = input instanceof Request ? input.url : String(input);
+        if (url.endsWith("/item/get")) {
+          return Response.json({
+            item: {
+              item_id: "item_1",
+              institution_id: null,
+              billed_products: [
+                "transactions",
+              ],
+              available_products: [],
+            },
+          });
+        }
+        if ((input instanceof Request ? input.url : String(input)).endsWith("/accounts/get")) {
           accountReads++;
           return Response.json({
             accounts: [
@@ -186,7 +257,7 @@ describe("durable finance history", () => {
       vi.stubGlobal(
         "fetch",
         vi.fn(async (input: string | URL) => {
-          if (String(input).endsWith("/item/remove")) {
+          if ((input instanceof Request ? input.url : String(input)).endsWith("/item/remove")) {
             return Response.json({});
           }
           started();
@@ -213,5 +284,8 @@ describe("durable finance history", () => {
     });
     expect((await stub.balances()).balances[0]?.current).toBe("100.00");
     expect((await stub.connections()).connections[0]?.status).toBe("disconnected");
+    expect((await stub.accounts()).accounts[0]?.active).toBe(false);
+    expect((await stub.netWorth()).totals).toEqual([]);
+    await stub.disconnect("plaid/item_1");
   });
 });

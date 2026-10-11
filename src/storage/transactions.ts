@@ -1,61 +1,89 @@
-import { type Query, type Transaction, TransactionSchema } from "../finance/schemas.js";
-import type { TransactionChanges } from "../providers/plaid/sync.js";
+import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import type { Query, Transaction } from "../finance/schemas.js";
+import type { TransactionChanges } from "../providers/provider.js";
+import { resolveStoredAccountId } from "./accounts.js";
+import type { FinanceDatabase } from "./database.js";
+import { accounts, connections, transactions } from "./schema.js";
 
 export function saveTransactionChanges(
-  sql: SqlStorage,
+  db: FinanceDatabase,
   connectionId: string,
   changes: TransactionChanges,
 ): void {
-  upsertTransactions(sql, changes.transactions);
+  upsertTransactions(db, changes.transactions);
   for (const id of changes.removed) {
-    sql.exec("DELETE FROM transactions WHERE id = ?", id);
+    db.delete(transactions).where(eq(transactions.id, id)).run();
   }
-  sql.exec("UPDATE connections SET cursor = ? WHERE id = ?", changes.cursor, connectionId);
+  db.update(connections)
+    .set({
+      cursor: changes.cursor,
+    })
+    .where(eq(connections.id, connectionId))
+    .run();
 }
-export function upsertTransactions(sql: SqlStorage, transactions: Transaction[]): void {
-  for (const transaction of transactions) {
-    sql.exec(
-      `INSERT INTO transactions(id, account_id, date, pending, payload) VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET date = excluded.date, pending = excluded.pending, payload = excluded.payload`,
-      transaction.id,
-      transaction.account_id,
-      transaction.date,
-      Number(transaction.pending),
-      JSON.stringify(transaction),
-    );
+export function upsertTransactions(db: FinanceDatabase, values: Transaction[]): void {
+  for (const transaction of values) {
+    const payload = {
+      ...transaction,
+      account_id: resolveStoredAccountId(db, transaction.account_id),
+    };
+    const row = {
+      id: payload.id,
+      account_id: payload.account_id,
+      date: payload.date,
+      pending: payload.pending,
+      payload,
+    };
+    db.insert(transactions)
+      .values(row)
+      .onConflictDoUpdate({
+        target: transactions.id,
+        set: row,
+      })
+      .run();
   }
 }
 export function replaceInvestmentActivity(
-  sql: SqlStorage,
+  db: FinanceDatabase,
   connectionId: string,
-  transactions: Transaction[],
+  values: Transaction[],
   startDate: string,
   endDate: string,
 ): void {
-  sql.exec(
-    `DELETE FROM transactions WHERE account_id IN (SELECT id FROM accounts WHERE connection_id = ?)
-    AND json_extract(payload, '$.kind') = 'investment' AND date >= ? AND date <= ?`,
-    connectionId,
-    startDate,
-    endDate,
-  );
-  upsertTransactions(sql, transactions);
-}
-export function listStoredTransactions(sql: SqlStorage, query: Query) {
-  const rows = sql
-    .exec<{
-      payload: string;
-    }>(
-      `SELECT payload FROM transactions
-    WHERE (? IS NULL OR account_id = ?) AND date >= ? AND date <= ?
-    ORDER BY date DESC, id LIMIT ? OFFSET ?`,
-      query.account_id ?? null,
-      query.account_id ?? null,
-      query.start_date ?? "0000-01-01",
-      query.end_date ?? "9999-12-31",
-      query.limit,
-      query.offset,
+  const selected = db
+    .select({
+      id: accounts.id,
+    })
+    .from(accounts)
+    .where(eq(accounts.connection_id, connectionId));
+  db.delete(transactions)
+    .where(
+      and(
+        inArray(transactions.account_id, selected),
+        sql`json_extract(${transactions.payload}, '$.kind') = 'investment'`,
+        gte(transactions.date, startDate),
+        lte(transactions.date, endDate),
+      ),
     )
-    .toArray();
-  return rows.map((row) => TransactionSchema.parse(JSON.parse(row.payload)));
+    .run();
+  upsertTransactions(db, values);
+}
+export function listStoredTransactions(db: FinanceDatabase, query: Query): Transaction[] {
+  return db
+    .select({
+      payload: transactions.payload,
+    })
+    .from(transactions)
+    .where(
+      and(
+        query.account_id ? eq(transactions.account_id, query.account_id) : undefined,
+        query.start_date ? gte(transactions.date, query.start_date) : undefined,
+        query.end_date ? lte(transactions.date, query.end_date) : undefined,
+      ),
+    )
+    .orderBy(desc(transactions.date), transactions.id)
+    .limit(query.limit)
+    .offset(query.offset)
+    .all()
+    .map((row) => row.payload);
 }

@@ -1,15 +1,9 @@
 import type { Transaction } from "../../finance/schemas.js";
+import type { TransactionChanges } from "../provider.js";
 import { accountId } from "./accounts.js";
-import { type PlaidClient, PlaidError } from "./client.js";
+import { type PlaidClient, PlaidError, readPlaidResponse } from "./client.js";
 import { SyncResponseSchema } from "./schemas.js";
 import { mapPlaidTransaction } from "./transactions.js";
-
-export type TransactionChanges = {
-  transactions: Transaction[];
-  removed: string[];
-  cursor: string;
-};
-
 export async function readTransactionChanges(
   client: PlaidClient,
   token: string,
@@ -41,14 +35,17 @@ async function readAllSyncPages(
   let cursor = initialCursor;
   // Bound each run; never persist a cursor without its corresponding complete update.
   for (let page = 0; page < 20; page++) {
-    const response = await client(
-      "/transactions/sync",
-      {
-        access_token: token,
-        cursor,
-        count: 500,
-      },
+    const response = await readPlaidResponse(
       SyncResponseSchema,
+      client.transactionsSync({
+        access_token: token,
+        ...(cursor
+          ? {
+              cursor,
+            }
+          : {}),
+        count: 500,
+      }),
     );
     for (const value of [
       ...response.added,

@@ -1,7 +1,9 @@
+import { CountryCode, type LinkTokenCreateRequest, Products } from "plaid";
 import * as z from "zod";
 import type { Env } from "../../config.js";
 import type { Capability } from "../../finance/schemas.js";
 import type { PlaidClient } from "./client.js";
+import { readPlaidResponse } from "./client.js";
 import { InstitutionResponseSchema, ItemResponseSchema } from "./schemas.js";
 
 const LinkSchema = z.object({
@@ -41,20 +43,20 @@ export async function createHostedLink(
   const products =
     kind === "bank"
       ? [
-          "transactions",
+          Products.Transactions,
         ]
       : [
-          "investments",
+          Products.Investments,
         ];
-  const body = {
+  const body: LinkTokenCreateRequest = {
     client_name: "Personal Finance MCP",
     language: "en",
     country_codes: [
-      "US",
-      "CA",
+      CountryCode.Us,
+      CountryCode.Ca,
     ],
     user: {
-      client_user_id: env.OWNER_EMAIL,
+      client_user_id: z.string().min(1).parse(env.OWNER_EMAIL),
     },
     webhook: `${env.PUBLIC_ORIGIN}/webhooks/plaid`,
     hosted_link: {
@@ -70,17 +72,17 @@ export async function createHostedLink(
           optional_products:
             kind === "bank"
               ? [
-                  "investments",
+                  Products.Investments,
                 ]
               : [
-                  "transactions",
+                  Products.Transactions,
                 ],
         }),
     transactions: {
       days_requested: 730,
     },
   };
-  const link = await client("/link/token/create", body, LinkSchema);
+  const link = await readPlaidResponse(LinkSchema, client.linkTokenCreate(body));
   const url = new URL(link.hosted_link_url);
   if (url.protocol !== "https:" || url.hostname !== "secure.plaid.com") {
     throw new Error("Unexpected Hosted Link origin");
@@ -88,46 +90,42 @@ export async function createHostedLink(
   return link;
 }
 export async function exchangeHostedLink(client: PlaidClient, linkToken: string) {
-  const session = await client(
-    "/link/token/get",
-    {
-      link_token: linkToken,
-    },
+  const session = await readPlaidResponse(
     SessionSchema,
+    client.linkTokenGet({
+      link_token: linkToken,
+    }),
   );
   const tokens = session.link_sessions.flatMap((value) => value.results?.item_add_results ?? []);
   if (tokens.length !== 1 || !tokens[0]) {
     throw new Error("Link has not completed or contains multiple items");
   }
-  const exchanged = await client(
-    "/item/public_token/exchange",
-    {
-      public_token: tokens[0].public_token,
-    },
+  const exchanged = await readPlaidResponse(
     ExchangeSchema,
+    client.itemPublicTokenExchange({
+      public_token: tokens[0].public_token,
+    }),
   );
   return exchanged;
 }
 export async function readItemDetails(client: PlaidClient, token: string) {
-  const data = await client(
-    "/item/get",
-    {
-      access_token: token,
-    },
+  const data = await readPlaidResponse(
     ItemResponseSchema,
+    client.itemGet({
+      access_token: token,
+    }),
   );
   let institution = "Financial institution";
   if (data.item.institution_id) {
-    const response = await client(
-      "/institutions/get_by_id",
-      {
+    const response = await readPlaidResponse(
+      InstitutionResponseSchema,
+      client.institutionsGetById({
         institution_id: data.item.institution_id,
         country_codes: [
-          "US",
-          "CA",
+          CountryCode.Us,
+          CountryCode.Ca,
         ],
-      },
-      InstitutionResponseSchema,
+      }),
     );
     institution = response.institution.name;
   }

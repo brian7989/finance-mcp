@@ -1,24 +1,27 @@
-import * as z from "zod";
+import { env } from "cloudflare:workers";
 import { fixturePlaidTransaction } from "../../../test/finance-fixtures.js";
-import { type PlaidClient, PlaidError } from "./client.js";
+import { createPlaidClient } from "./client.js";
 import { readTransactionChanges } from "./sync.js";
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 function page(
-  nextCursor: string,
+  cursor: string,
   more: boolean,
   added: unknown[] = [],
   modified: unknown[] = [],
   removed: unknown[] = [],
 ) {
   return {
-    next_cursor: nextCursor,
+    next_cursor: cursor,
     has_more: more,
     added,
     modified,
     removed,
   };
 }
-describe("Plaid incremental synchronization", () => {
+describe("Plaid SDK incremental synchronization", () => {
   it("combines additions, corrections, and removals across pages", async () => {
     const responses = [
       page("page2", true, [
@@ -40,10 +43,16 @@ describe("Plaid incremental synchronization", () => {
         ],
       ),
     ];
-    const request = vi.fn(async (_path: string, _body: object) => responses.shift());
-    const client: PlaidClient = async (path, body, schema) =>
-      schema.parse(await request(path, body));
-    const changes = await readTransactionChanges(client, "fixture", "plaid/item_1", "original");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json(responses.shift())),
+    );
+    const changes = await readTransactionChanges(
+      createPlaidClient(env),
+      "fixture",
+      "plaid/item_1",
+      "original",
+    );
     expect(changes.transactions).toHaveLength(1);
     expect(changes.transactions[0]).toMatchObject({
       id: "plaid/item_1/a",
@@ -55,32 +64,44 @@ describe("Plaid incremental synchronization", () => {
     ]);
     expect(changes.cursor).toBe("final");
   });
-  it("restarts the whole batch from the original cursor after a pagination mutation", async () => {
+  it("restarts from the original cursor after a pagination mutation", async () => {
     const cursors: unknown[] = [];
     let calls = 0;
-    const client: PlaidClient = async (_path, body, schema) => {
-      cursors.push(
-        z
-          .object({
-            cursor: z.string().nullable(),
-          })
-          .parse(body).cursor,
-      );
-      calls++;
-      if (calls === 2) {
-        throw new PlaidError("TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION");
-      }
-      return schema.parse(
-        calls === 1
-          ? page("second", true, [
-              fixturePlaidTransaction("discard"),
-            ])
-          : page("final", false, [
-              fixturePlaidTransaction("keep"),
-            ]),
-      );
-    };
-    const changes = await readTransactionChanges(client, "fixture", "plaid/item_1", "original");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const body = await new Request(input, init).json<{
+          cursor?: string;
+        }>();
+        cursors.push(body.cursor);
+        calls++;
+        if (calls === 2) {
+          return Response.json(
+            {
+              error_code: "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION",
+            },
+            {
+              status: 400,
+            },
+          );
+        }
+        return Response.json(
+          calls === 1
+            ? page("second", true, [
+                fixturePlaidTransaction("discard"),
+              ])
+            : page("final", false, [
+                fixturePlaidTransaction("keep"),
+              ]),
+        );
+      }),
+    );
+    const changes = await readTransactionChanges(
+      createPlaidClient(env),
+      "fixture",
+      "plaid/item_1",
+      "original",
+    );
     expect(cursors).toEqual([
       "original",
       "second",
@@ -91,14 +112,20 @@ describe("Plaid incremental synchronization", () => {
     ]);
   });
   it("bounds repeated pagination mutations", async () => {
-    let calls = 0;
-    const client: PlaidClient = async () => {
-      calls++;
-      throw new PlaidError("TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION");
-    };
-    await expect(readTransactionChanges(client, "fixture", "plaid/item_1", null)).rejects.toThrow(
-      "Plaid request failed",
+    const fetch = vi.fn(async () =>
+      Response.json(
+        {
+          error_code: "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION",
+        },
+        {
+          status: 400,
+        },
+      ),
     );
-    expect(calls).toBe(3);
+    vi.stubGlobal("fetch", fetch);
+    await expect(
+      readTransactionChanges(createPlaidClient(env), "fixture", "plaid/item_1", null),
+    ).rejects.toThrow("Plaid request failed");
+    expect(fetch).toHaveBeenCalledTimes(3);
   });
 });

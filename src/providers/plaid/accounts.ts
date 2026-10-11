@@ -1,6 +1,7 @@
 import { decimal } from "../../finance/money.js";
 import type { Account, Balance, Connection } from "../../finance/schemas.js";
 import type { PlaidClient } from "./client.js";
+import { readPlaidResponse } from "./client.js";
 import { AccountsResponseSchema, type PlaidAccount } from "./schemas.js";
 
 export async function readPlaidAccounts(
@@ -9,13 +10,15 @@ export async function readPlaidAccounts(
   connection: Connection,
   live = false,
 ) {
-  const path = live ? "/accounts/balance/get" : "/accounts/get";
-  const data = await client(
-    path,
-    {
-      access_token: token,
-    },
+  const data = await readPlaidResponse(
     AccountsResponseSchema,
+    live
+      ? client.accountsBalanceGet({
+          access_token: token,
+        })
+      : client.accountsGet({
+          access_token: token,
+        }),
   );
   const fetchedAt = new Date().toISOString();
   return {

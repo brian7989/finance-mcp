@@ -1,5 +1,5 @@
-import { deriveBenefits, isHsaAccount } from "../src/providers/benepass/accounts.js";
-import { AccountSchema } from "../src/providers/benepass/accounts.schemas.js";
+import { deriveBenefits, isHsaAccount } from "./accounts.js";
+import { AccountSchema } from "./accounts.schemas.js";
 
 describe("account and benefit schemas", () => {
   it("accepts a typical account payload", () => {

@@ -1,101 +1,139 @@
+import { and, eq, ne } from "drizzle-orm";
 import { type Connection, ConnectionSchema } from "../finance/schemas.js";
+import type { FinanceDatabase } from "./database.js";
+import { connections } from "./schema.js";
 
-type ConnectionRow = {
-  id: string;
-  provider: string;
-  institution: string;
-  status: string;
-  capabilities: string;
-  revision: string;
-  last_success_at: string | null;
-  last_error: string | null;
-};
-const publicColumns =
-  "id, provider, institution, status, capabilities, revision, last_success_at, last_error";
-
-export function listStoredConnections(sql: SqlStorage): Connection[] {
-  return sql
-    .exec<ConnectionRow>(`SELECT ${publicColumns} FROM connections ORDER BY institution`)
-    .toArray()
-    .map(parseConnection);
+export function listStoredConnections(db: FinanceDatabase): Connection[] {
+  return db.select().from(connections).orderBy(connections.institution).all().map(parseConnection);
 }
-export function requireConnection(sql: SqlStorage, id: string): Connection {
-  const row = sql
-    .exec<ConnectionRow>(`SELECT ${publicColumns} FROM connections WHERE id = ?`, id)
-    .toArray()[0];
+export function requireConnection(db: FinanceDatabase, id: string): Connection {
+  const row = db.select().from(connections).where(eq(connections.id, id)).get();
   if (!row) {
     throw new Error("Unknown connection");
   }
   return parseConnection(row);
 }
-export function assertConnectionRevision(sql: SqlStorage, expected: Connection): void {
-  const current = requireConnection(sql, expected.id);
+export function assertConnectionRevision(db: FinanceDatabase, expected: Connection): void {
+  const current = requireConnection(db, expected.id);
   if (current.revision !== expected.revision || current.status === "disconnected") {
     throw new Error("Connection changed during operation");
   }
 }
 export function saveConnection(
-  sql: SqlStorage,
+  db: FinanceDatabase,
   connection: Connection,
   credential: string | null,
 ): void {
-  sql.exec(
-    `INSERT INTO connections (id, provider, institution, status, capabilities, credential, revision)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET status = excluded.status, capabilities = excluded.capabilities,
-      credential = excluded.credential, revision = excluded.revision, institution = excluded.institution, last_error = NULL`,
-    connection.id,
-    connection.provider,
-    connection.institution,
-    connection.status,
-    JSON.stringify(connection.capabilities),
+  const values = {
+    ...connection,
     credential,
-    connection.revision,
+  };
+  db.insert(connections)
+    .values(values)
+    .onConflictDoUpdate({
+      target: connections.id,
+      set: values,
+    })
+    .run();
+}
+export function hasStoredCredential(db: FinanceDatabase, id: string): boolean {
+  return Boolean(
+    db
+      .select({
+        credential: connections.credential,
+      })
+      .from(connections)
+      .where(eq(connections.id, id))
+      .get()?.credential,
   );
 }
-export function readEncryptedCredential(sql: SqlStorage, id: string): string {
-  const row = sql
-    .exec<{
-      credential: string | null;
-    }>("SELECT credential FROM connections WHERE id = ?", id)
-    .toArray()[0];
+export function readEncryptedCredential(db: FinanceDatabase, id: string): string {
+  const row = db
+    .select({
+      credential: connections.credential,
+    })
+    .from(connections)
+    .where(eq(connections.id, id))
+    .get();
   if (!row?.credential) {
     throw new Error("Connection is not linked");
   }
   return row.credential;
 }
-export function readSyncCursor(sql: SqlStorage, id: string): string | null {
+export function readSyncCursor(db: FinanceDatabase, id: string): string | null {
   return (
-    sql
-      .exec<{
-        cursor: string | null;
-      }>("SELECT cursor FROM connections WHERE id = ?", id)
-      .toArray()[0]?.cursor ?? null
+    db
+      .select({
+        cursor: connections.cursor,
+      })
+      .from(connections)
+      .where(eq(connections.id, id))
+      .get()?.cursor ?? null
   );
 }
-export function recordSuccess(sql: SqlStorage, id: string): void {
-  sql.exec(
-    "UPDATE connections SET status = 'connected', last_success_at = ?, last_error = NULL WHERE id = ?",
-    new Date().toISOString(),
-    id,
-  );
+export function recordSuccess(db: FinanceDatabase, id: string): void {
+  db.update(connections)
+    .set({
+      status: "connected",
+      last_success_at: new Date().toISOString(),
+      last_error: null,
+    })
+    .where(eq(connections.id, id))
+    .run();
 }
-export function recordFailure(sql: SqlStorage, expected: Connection, reconnect: boolean): void {
+export function recordFailure(db: FinanceDatabase, expected: Connection, reconnect: boolean): void {
   const status = reconnect ? "needs_reconnection" : expected.status;
   const reason = reconnect
     ? "Sign in again to restore access."
     : "Provider unavailable; stored data may be stale.";
-  sql.exec(
-    "UPDATE connections SET status = ?, last_error = ? WHERE id = ? AND revision = ? AND status != 'disconnected'",
-    status,
-    reason,
-    expected.id,
-    expected.revision,
-  );
+  db.update(connections)
+    .set({
+      status,
+      last_error: reason,
+    })
+    .where(
+      and(
+        eq(connections.id, expected.id),
+        eq(connections.revision, expected.revision),
+        ne(connections.status, "disconnected"),
+      ),
+    )
+    .run();
 }
-function parseConnection(row: ConnectionRow): Connection {
-  return ConnectionSchema.parse({
-    ...row,
-    capabilities: JSON.parse(row.capabilities),
-  });
+export function markDisconnected(db: FinanceDatabase, id: string): string {
+  const revision = crypto.randomUUID();
+  db.update(connections)
+    .set({
+      status: "disconnected",
+      revision,
+    })
+    .where(eq(connections.id, id))
+    .run();
+  return revision;
+}
+export function clearCredential(db: FinanceDatabase, id: string, revision: string): void {
+  db.update(connections)
+    .set({
+      credential: null,
+    })
+    .where(and(eq(connections.id, id), eq(connections.revision, revision)))
+    .run();
+}
+export function updateConnectionMetadata(
+  db: FinanceDatabase,
+  expected: Connection,
+  details: {
+    institution: string;
+    capabilities: Connection["capabilities"];
+  },
+): Connection {
+  assertConnectionRevision(db, expected);
+  db.update(connections).set(details).where(eq(connections.id, expected.id)).run();
+  return {
+    ...expected,
+    ...details,
+  };
+}
+function parseConnection(row: typeof connections.$inferSelect): Connection {
+  return ConnectionSchema.parse(row);
 }

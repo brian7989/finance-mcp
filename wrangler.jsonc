@@ -39,5 +39,14 @@
     "crons": [
       "17 9 * * *"
     ]
-  }
+  },
+  "rules": [
+    {
+      "type": "Text",
+      "globs": [
+        "**/*.sql"
+      ],
+      "fallthrough": true
+    }
+  ]
 }

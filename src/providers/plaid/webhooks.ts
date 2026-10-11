@@ -3,7 +3,7 @@ import { decodeProtectedHeader, importJWK, jwtVerify } from "jose";
 import * as z from "zod";
 import { type Env, ownerStore } from "../../config.js";
 import { readBoundedBody } from "../../web/request-body.js";
-import { createPlaidClient } from "./client.js";
+import { createPlaidClient, readPlaidResponse } from "./client.js";
 
 const KeySchema = z.object({
   key: z.object({
@@ -59,12 +59,11 @@ export async function verifyPlaidWebhook(
   if (header.alg !== "ES256" || !header.kid) {
     throw new Error("Invalid webhook algorithm");
   }
-  const data = await createPlaidClient(env)(
-    "/webhook_verification_key/get",
-    {
-      key_id: header.kid,
-    },
+  const data = await readPlaidResponse(
     KeySchema,
+    createPlaidClient(env).webhookVerificationKeyGet({
+      key_id: header.kid,
+    }),
   );
   if (data.key.expired_at !== null) {
     throw new Error("Expired webhook key");

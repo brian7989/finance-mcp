@@ -1,8 +1,8 @@
 import { evictDurableObject, runInDurableObject } from "cloudflare:test";
-import { createCognitoAuth } from "../src/providers/benepass/cognito.js";
-import { jsonResponse, seedSession, testSession } from "./helpers.js";
+import { jsonResponse, seedSession, testSession } from "../../../test/helpers.js";
+import { createCognitoAuth } from "./cognito.js";
 
-vi.mock("../src/providers/benepass/cognito.js", () => ({
+vi.mock("./cognito.js", () => ({
   createCognitoAuth: vi.fn(),
 }));
 afterEach(() => {

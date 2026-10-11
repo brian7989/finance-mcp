@@ -1,6 +1,6 @@
-import { BenepassClient } from "../src/providers/benepass/client.js";
-import { HsaReader } from "../src/providers/benepass/hsa/hsa.js";
-import { employeeHeaders, employeeUrl } from "../src/providers/benepass/http.js";
+import { BenepassClient } from "../client.js";
+import { employeeHeaders, employeeUrl } from "../http.js";
+import { HsaReader } from "./hsa.js";
 
 function jsonResponse(status: number, data: unknown): Response {
   return Response.json(data, {
@@ -304,7 +304,7 @@ describe("HSA contracts", () => {
     await withHsa(async (hsa, calls) => {
       await expect(
         hsa.summary({
-          account_id: "..",
+          account_id: "../../../..",
         }),
       ).rejects.toThrow();
       expect(calls).toHaveLength(0);

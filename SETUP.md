@@ -11,6 +11,10 @@ pnpm check
 
 Tests use synthetic data in Cloudflare's local runtime and never require bank credentials. Formatting uses Biome; typed ESLint rejects deprecated APIs.
 
+The official Plaid SDK handles API requests through Axios’s Workers-compatible fetch adapter. openid-client handles upstream OIDC, big.js handles decimal arithmetic, and Drizzle manages typed SQLite queries and versioned migrations. Provider adapters normalize institution data; connection workflows, refresh scheduling, and storage repositories stay separate.
+
+After changing `src/storage/schema.ts`, run `pnpm db:generate`, review the generated SQL, and register its import in `src/storage/migrations.ts`. Commit the migration and Drizzle metadata together. Migrations run when the Durable Object starts; the initial migration also adopts the previous schema without deleting history.
+
 ## Cloudflare configuration
 
 Use Workers Free. The configuration uses only a Worker, two SQLite Durable Object classes, OAuth KV, and a daily Cron Trigger. Wrangler provisions the new OAuth KV namespace at deployment. Keep this project's storage separate from the previous Benepass Worker.
@@ -43,6 +47,8 @@ Point compatible remote MCP clients at `${PUBLIC_ORIGIN}/mcp`. The server uses S
 
 The daily Cron Trigger runs at 09:17 UTC. Verified Plaid webhooks also schedule refreshes. One institution is processed per alarm invocation; refreshes for the same connection are coalesced.
 
-Balance history starts with the first successful observation, keeping the latest observation for each UTC day. Banking history can backfill up to the amount authorized and returned by Plaid; investment activity is retrieved separately. No prior daily balance history is invented. Benepass currently provides HSA balances and holdings; its transaction history is not normalized without a verified account mapping.
+Balance history starts with the first successful observation, keeping the latest observation for each UTC day. Banking history can backfill up to the amount authorized and returned by Plaid; investment activity initially backfills up to two years. Later refreshes reread a 90-day overlap and extend it to cover time since the previous successful refresh, bounded by two years. Corrections older than that refresh window require a separate backfill. No prior daily balance history is invented. Benepass currently provides HSA balances and holdings; its transaction history is not normalized without a verified account mapping.
+
+Internal account IDs preserve preferences and history through ordinary refreshes and runtime restarts. A newly created Plaid Item is a separate connection; accounts are not guessed to match by name or mask.
 
 Disconnecting stops synchronization and revokes Plaid access when the provider is reachable, while preserving history. If revocation fails, retry disconnecting. Free-tier quotas are finite; no paid plan upgrade is configured. Keep real credentials out of local tests and fixtures.

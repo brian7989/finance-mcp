@@ -96,13 +96,18 @@ export const SnapshotSchema = z.object({
   balances: z.array(BalanceSchema),
   holdings: z.array(HoldingSchema).nullable(),
 });
-export const QuerySchema = z.object({
-  account_id: z.string().optional(),
-  start_date: z.iso.date().optional(),
-  end_date: z.iso.date().optional(),
-  limit: z.number().int().min(1).max(500).default(100),
-  offset: z.number().int().min(0).max(100000).default(0),
-});
+export const QuerySchema = z
+  .object({
+    account_id: z.string().optional(),
+    start_date: z.iso.date().optional(),
+    end_date: z.iso.date().optional(),
+    limit: z.number().int().min(1).max(500).default(100),
+    offset: z.number().int().min(0).max(100000).default(0),
+  })
+  .refine(
+    (query) => !query.start_date || !query.end_date || query.start_date <= query.end_date,
+    "start_date must not follow end_date",
+  );
 export type Connection = z.infer<typeof ConnectionSchema>;
 export type Account = z.infer<typeof AccountSchema>;
 export type Preference = z.infer<typeof PreferenceSchema>;

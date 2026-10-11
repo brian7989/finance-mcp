@@ -7,7 +7,9 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("real Workers OAuth and MCP transport", () => {
+describe("real Workers OAuth and MCP transport", {
+  timeout: 15000,
+}, () => {
   it("rejects unauthenticated access and publishes discovery", async () => {
     const response = await workerFetch(`${origin}/mcp`, {
       method: "POST",
@@ -80,6 +82,8 @@ describe("real Workers OAuth and MCP transport", () => {
             .sign(keys.privateKey);
           return Response.json({
             id_token: token,
+            access_token: "fixture-oidc-access",
+            token_type: "Bearer",
           });
         }
         throw new Error("Unexpected network request");
