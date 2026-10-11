@@ -1,20 +1,15 @@
-import { ChevronRight, Ellipsis, Landmark, RefreshCw, ShieldCheck } from "lucide-react";
-import { type RefObject, useRef, useState } from "react";
+import { ChevronRight, Landmark } from "lucide-react";
+import { useState } from "react";
 import type { ConnectionsData, ConnectionView } from "../../../connections-types";
 import { ActionForm, ConnectionField } from "../../components/forms";
 import { Button } from "../../components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "../../components/ui/dropdown-menu";
 import {
   Sheet,
   SheetContent,
   SheetDescription,
   SheetHeader,
   SheetTitle,
+  SheetTrigger,
 } from "../../components/ui/sheet";
 import {
   accountCount,
@@ -61,7 +56,6 @@ function InstitutionRow({
   data: ConnectionsData;
 }) {
   const [open, setOpen] = useState(false);
-  const menuTrigger = useRef<HTMLButtonElement>(null);
   const showDetails = () => setOpen(true);
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -72,19 +66,13 @@ function InstitutionRow({
           onManage={showDetails}
         />
         <ConnectionStatus connection={connection} />
-        <InstitutionMenu
-          connection={connection}
-          open={open}
-          onManage={showDetails}
-          triggerRef={menuTrigger}
-        />
-        <QuickRefreshForm connection={connection} csrf={data.csrf} />
+        <SheetTrigger asChild>
+          <Button variant="ghost" size="icon" aria-label={`Manage ${connection.institution}`}>
+            <ChevronRight aria-hidden="true" />
+          </Button>
+        </SheetTrigger>
       </div>
-      <InstitutionSheet
-        connection={connection}
-        data={data}
-        restoreFocus={() => menuTrigger.current?.focus()}
-      />
+      <InstitutionSheet connection={connection} data={data} />
     </Sheet>
   );
 }
@@ -113,61 +101,6 @@ function InstitutionIdentity({
     </>
   );
 }
-function InstitutionMenu({
-  connection,
-  open,
-  onManage,
-  triggerRef,
-}: {
-  connection: ConnectionView;
-  open: boolean;
-  onManage: () => void;
-  triggerRef: RefObject<HTMLButtonElement | null>;
-}) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          ref={triggerRef}
-          variant="ghost"
-          size="icon"
-          aria-label={`Manage ${connection.institution}`}
-        >
-          <Ellipsis aria-hidden="true" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="end"
-        onCloseAutoFocus={(event) => {
-          if (open) {
-            event.preventDefault();
-          }
-        }}
-      >
-        <DropdownMenuItem onSelect={onManage}>
-          Manage connection
-          <ChevronRight aria-hidden="true" />
-        </DropdownMenuItem>
-        {connection.status !== "disconnected" && (
-          <DropdownMenuItem asChild>
-            <button type="submit" form={`refresh-${connection.id}`}>
-              <RefreshCw aria-hidden="true" />
-              Refresh saved data
-            </button>
-          </DropdownMenuItem>
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-function QuickRefreshForm({ connection, csrf }: { connection: ConnectionView; csrf: string }) {
-  return (
-    <form id={`refresh-${connection.id}`} method="post" action="/connections/sync" hidden>
-      <input type="hidden" name="csrf" value={csrf} />
-      <ConnectionField id={connection.id} />
-    </form>
-  );
-}
 function ConnectionStatus({ connection }: { connection: ConnectionView }) {
   const attention = requiresAttention(connection);
   const healthy = connection.status === "connected" && !attention;
@@ -187,21 +120,13 @@ function ConnectionStatus({ connection }: { connection: ConnectionView }) {
 function InstitutionSheet({
   connection,
   data,
-  restoreFocus,
 }: {
   connection: ConnectionView;
   data: ConnectionsData;
-  restoreFocus: () => void;
 }) {
   const accounts = connectionAccounts(connection, data);
   return (
-    <SheetContent
-      className="w-full overflow-y-auto sm:max-w-md"
-      onCloseAutoFocus={(event) => {
-        event.preventDefault();
-        restoreFocus();
-      }}
-    >
+    <SheetContent className="w-full overflow-y-auto sm:max-w-md">
       <SheetHeader className="px-6 pt-8">
         <SheetTitle>{connection.institution}</SheetTitle>
         <SheetDescription>
@@ -245,10 +170,6 @@ function ConnectionInformation({ connection }: { connection: ConnectionView }) {
         <dd className="max-w-52 text-right leading-relaxed">
           {connection.capabilities.map((capability) => capabilityLabels[capability]).join(", ")}
         </dd>
-      </div>
-      <div className="flex items-center gap-1.5 text-muted-foreground">
-        <ShieldCheck className="size-3.5" aria-hidden="true" />
-        Read-only access
       </div>
     </dl>
   );

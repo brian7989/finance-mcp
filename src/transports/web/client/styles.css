@@ -129,10 +129,7 @@
   text-decoration: underline;
   text-underline-offset: 4px;
 }
-.auth-footer {
-  font-size: 0.75rem;
-  color: var(--muted-foreground);
-}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

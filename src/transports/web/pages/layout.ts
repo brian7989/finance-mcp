@@ -36,7 +36,7 @@ export function page(title: string, body: HtmlTemplate): HtmlTemplate {
   return documentPage(
     title,
     html`<div class="auth-shell"><header class="auth-brand"><span aria-hidden="true">◈</span> Personal Finance</header>
-      <main class="auth-panel">${body}</main><footer class="auth-footer">Private by design. Read-only access.</footer></div>`,
+      <main class="auth-panel">${body}</main></div>`,
   );
 }
 function contentSecurityPolicy(formOrigins: string[] = []): string {

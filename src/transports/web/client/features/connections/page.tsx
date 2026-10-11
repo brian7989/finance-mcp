@@ -58,7 +58,6 @@ function WorkspaceSidebar({ data }: { data: ConnectionsData }) {
         <ActionForm action="/sign-out" csrf={data.csrf} label="Sign out" variant="ghost" />
       </div>
       <div className="mt-auto hidden space-y-4 px-3 pt-12 md:block">
-        <p className="text-xs text-muted-foreground">Sync · Midnight Pacific</p>
         <ActionForm action="/sign-out" csrf={data.csrf} label="Sign out" variant="ghost" />
       </div>
     </aside>
