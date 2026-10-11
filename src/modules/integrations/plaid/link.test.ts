@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { createPlaidClient } from "./client.js";
-import { createHostedLink, exchangeHostedLink } from "./link.js";
+import { createHostedLink, exchangeHostedLink, readItemDetails } from "./link.js";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -36,6 +36,45 @@ describe("official Plaid SDK and Hosted Link", () => {
       },
     });
     expect(bodies[0]).not.toHaveProperty("products");
+  });
+  it("does not treat consent for optional investments as product support", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = new URL(new Request(input, init).url).pathname;
+        if (path === "/item/get") {
+          return Response.json({
+            item: {
+              item_id: "fixture-item",
+              institution_id: "fixture-bank",
+              products: [
+                "transactions",
+              ],
+              billed_products: [
+                "transactions",
+              ],
+              available_products: [
+                "balance",
+              ],
+              consented_products: [
+                "transactions",
+                "investments",
+              ],
+            },
+          });
+        }
+        return Response.json({
+          institution: {
+            name: "Fixture cash account",
+          },
+        });
+      }),
+    );
+    const details = await readItemDetails(createPlaidClient(env), "fixture-token");
+    expect(details.capabilities).toEqual([
+      "balances",
+      "transactions",
+    ]);
   });
   it("rejects untrusted redirect origins", async () => {
     vi.stubGlobal(

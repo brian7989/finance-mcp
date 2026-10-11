@@ -74,7 +74,7 @@ export async function readItemDetails(client: PlaidClient, token: string) {
   const institution = await readInstitutionName(client, data.item.institution_id);
   return {
     institution,
-    capabilities: itemCapabilities(data.item.consented_products ?? data.item.billed_products),
+    capabilities: itemCapabilities(enabledProducts(data.item)),
   };
 }
 async function readInstitutionName(client: PlaidClient, id: string | null): Promise<string> {
@@ -94,6 +94,11 @@ async function readInstitutionName(client: PlaidClient, id: string | null): Prom
   return response.institution.name;
 }
 
+function enabledProducts(item: z.infer<typeof ItemResponseSchema>["item"]): string[] {
+  const initialized = item.products ?? item.billed_products;
+  const consented = item.consented_products;
+  return consented ? initialized.filter((product) => consented.includes(product)) : initialized;
+}
 function itemCapabilities(products: string[]): Capability[] {
   const capabilities: Capability[] = [
     "balances",

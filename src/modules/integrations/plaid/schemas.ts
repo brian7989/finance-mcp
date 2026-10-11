@@ -22,6 +22,7 @@ export const ItemResponseSchema = z.object({
     item_id: z.string(),
     institution_id: z.string().nullable(),
     consented_products: z.array(z.string()).nullish(),
+    products: z.array(z.string()).optional(),
     billed_products: z.array(z.string()),
     available_products: z.array(z.string()),
   }),

@@ -1,4 +1,5 @@
-import { AuthenticationError } from "../../../common/errors.js";
+import * as z from "zod";
+import { AuthenticationError, errorCode } from "../../../common/errors.js";
 import { saveSnapshot } from "../../../database/repositories/accounts.js";
 import {
   assertConnectionRevision,
@@ -31,6 +32,7 @@ export async function refreshConnection(context: FinanceContext, id: string): Pr
     await refreshProviderData(context, connection);
     return syncResult(id, true);
   } catch (error) {
+    reportSyncFailure(error);
     recordFailure(context.db, connection, error instanceof AuthenticationError);
     return syncResult(id, false);
   }
@@ -113,4 +115,15 @@ function syncResult(id: string, ok: boolean): SyncResult {
     connection_id: id,
     ok,
   };
+}
+
+function reportSyncFailure(error: unknown): void {
+  const details =
+    error instanceof z.ZodError
+      ? error.issues.map(({ code, path }) => ({
+          code,
+          path,
+        }))
+      : (errorCode(error) ?? "UNEXPECTED_ERROR");
+  console.error("finance-mcp: sync failed", details);
 }
