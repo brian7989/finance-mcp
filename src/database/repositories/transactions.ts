@@ -23,24 +23,7 @@ export function saveTransactionChanges(
 }
 export function upsertTransactions(db: FinanceDatabase, values: Transaction[]): void {
   for (const transaction of values) {
-    const payload = {
-      ...transaction,
-      account_id: resolveStoredAccountId(db, transaction.account_id),
-    };
-    const row = {
-      id: payload.id,
-      account_id: payload.account_id,
-      date: payload.date,
-      pending: payload.pending,
-      payload,
-    };
-    db.insert(transactions)
-      .values(row)
-      .onConflictDoUpdate({
-        target: transactions.id,
-        set: row,
-      })
-      .run();
+    saveTransaction(db, transaction);
   }
 }
 export function replaceInvestmentActivity(
@@ -86,4 +69,25 @@ export function listStoredTransactions(db: FinanceDatabase, query: Query): Trans
     .offset(query.offset)
     .all()
     .map((row) => row.payload);
+}
+
+function saveTransaction(db: FinanceDatabase, transaction: Transaction): void {
+  const payload = {
+    ...transaction,
+    account_id: resolveStoredAccountId(db, transaction.account_id),
+  };
+  const row = {
+    id: payload.id,
+    account_id: payload.account_id,
+    date: payload.date,
+    pending: payload.pending,
+    payload,
+  };
+  db.insert(transactions)
+    .values(row)
+    .onConflictDoUpdate({
+      target: transactions.id,
+      set: row,
+    })
+    .run();
 }

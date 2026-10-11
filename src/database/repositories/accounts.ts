@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import type { Snapshot } from "../../modules/finance/schemas.js";
+import type { Account, Snapshot } from "../../modules/finance/schemas.js";
 import type { FinanceDatabase } from "../client.js";
 import { accountAliases, accounts } from "../schema.js";
 import { saveBalanceObservation } from "./balances.js";
@@ -7,52 +7,11 @@ import { replaceHoldings } from "./holdings.js";
 
 export function saveSnapshot(db: FinanceDatabase, connectionId: string, snapshot: Snapshot): void {
   const ids = reconcileAccountIds(db, snapshot);
-  db.update(accounts)
-    .set({
-      active: false,
-    })
-    .where(eq(accounts.connection_id, connectionId))
-    .run();
-  for (const account of snapshot.accounts) {
-    const id = requireMappedId(ids, account.id);
-    const payload = {
-      ...account,
-      id,
-    };
-    db.insert(accounts)
-      .values({
-        id,
-        connection_id: connectionId,
-        payload,
-        active: true,
-      })
-      .onConflictDoUpdate({
-        target: accounts.id,
-        set: {
-          payload,
-          active: true,
-        },
-      })
-      .run();
-  }
-  for (const balance of snapshot.balances) {
-    saveBalanceObservation(db, {
-      ...balance,
-      account_id: requireMappedId(ids, balance.account_id),
-    });
-  }
-  if (snapshot.holdings !== null) {
-    replaceHoldings(
-      db,
-      connectionId,
-      snapshot.holdings.map((holding) => ({
-        ...holding,
-        account_id: requireMappedId(ids, holding.account_id),
-      })),
-    );
-  }
+  deactivateConnectionAccounts(db, connectionId);
+  saveAccountSnapshots(db, connectionId, snapshot, ids);
+  saveMappedBalances(db, snapshot, ids);
+  saveMappedHoldings(db, connectionId, snapshot, ids);
 }
-
 export function listStoredAccounts(db: FinanceDatabase) {
   return db
     .select()
@@ -79,6 +38,64 @@ export function resolveStoredAccountId(db: FinanceDatabase, providerId: string):
       ?.account_id ?? providerId
   );
 }
+function saveAccountSnapshots(
+  db: FinanceDatabase,
+  connectionId: string,
+  snapshot: Snapshot,
+  ids: Map<string, string>,
+): void {
+  for (const account of snapshot.accounts) {
+    saveAccount(db, connectionId, {
+      ...account,
+      id: requireMappedId(ids, account.id),
+    });
+  }
+}
+function saveAccount(db: FinanceDatabase, connectionId: string, payload: Account): void {
+  db.insert(accounts)
+    .values({
+      id: payload.id,
+      connection_id: connectionId,
+      payload,
+      active: true,
+    })
+    .onConflictDoUpdate({
+      target: accounts.id,
+      set: {
+        payload,
+        active: true,
+      },
+    })
+    .run();
+}
+function saveMappedBalances(
+  db: FinanceDatabase,
+  snapshot: Snapshot,
+  ids: Map<string, string>,
+): void {
+  for (const balance of snapshot.balances) {
+    saveBalanceObservation(db, {
+      ...balance,
+      account_id: requireMappedId(ids, balance.account_id),
+    });
+  }
+}
+function saveMappedHoldings(
+  db: FinanceDatabase,
+  connectionId: string,
+  snapshot: Snapshot,
+  ids: Map<string, string>,
+): void {
+  if (snapshot.holdings === null) {
+    return;
+  }
+  const values = snapshot.holdings.map((holding) => ({
+    ...holding,
+    account_id: requireMappedId(ids, holding.account_id),
+  }));
+  replaceHoldings(db, connectionId, values);
+}
+
 function reconcileAccountIds(db: FinanceDatabase, snapshot: Snapshot): Map<string, string> {
   const ids = new Map<string, string>();
   const stored = listStoredAccounts(db);

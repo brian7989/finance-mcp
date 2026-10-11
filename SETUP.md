@@ -11,7 +11,9 @@ pnpm check
 
 Tests use synthetic data in Cloudflare's local runtime and never require bank credentials. Formatting uses Biome; typed ESLint rejects deprecated APIs.
 
-The official Plaid SDK handles API requests through Axios’s Workers-compatible fetch adapter. openid-client handles upstream OIDC, big.js handles decimal arithmetic, and Drizzle manages typed SQLite queries and versioned migrations. Provider adapters normalize institution data; connection workflows, refresh scheduling, and storage repositories stay separate.
+Hono declares HTTP routes, composes named middleware, and renders escaped HTML fragments. Owner-session and CSRF checks remain explicit, while signed webhooks retain their original bytes.
+
+The official Plaid SDK handles API requests through Axios’s Workers-compatible fetch adapter. openid-client handles upstream OIDC, big.js handles decimal arithmetic, and Drizzle manages typed SQLite queries and versioned migrations. A typed registry selects provider factories. Adapters own credential resolution, provider errors, and disconnection behavior; connection workflows, refresh scheduling, and storage repositories stay separate.
 
 After changing `src/database/schema.ts`, run `pnpm db:generate`, review the generated SQL, and register its import in `src/database/migrations.ts`. Commit the migration and Drizzle metadata together. Migrations run when the Durable Object starts; the initial migration also adopts the previous schema without deleting history.
 

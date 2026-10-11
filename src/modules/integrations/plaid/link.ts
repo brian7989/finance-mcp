@@ -40,53 +40,9 @@ export async function createHostedLink(
   kind: "bank" | "investment",
   token?: string,
 ) {
-  const products =
-    kind === "bank"
-      ? [
-          Products.Transactions,
-        ]
-      : [
-          Products.Investments,
-        ];
-  const body: LinkTokenCreateRequest = {
-    client_name: "Personal Finance MCP",
-    language: "en",
-    country_codes: [
-      CountryCode.Us,
-      CountryCode.Ca,
-    ],
-    user: {
-      client_user_id: z.string().min(1).parse(env.OWNER_EMAIL),
-    },
-    webhook: `${env.PUBLIC_ORIGIN}/webhooks/plaid`,
-    hosted_link: {
-      completion_redirect_uri: `${env.PUBLIC_ORIGIN}/connections/plaid/complete?flow=${flowId}`,
-      url_lifetime_seconds: 1800,
-    },
-    ...(token
-      ? {
-          access_token: token,
-        }
-      : {
-          products,
-          optional_products:
-            kind === "bank"
-              ? [
-                  Products.Investments,
-                ]
-              : [
-                  Products.Transactions,
-                ],
-        }),
-    transactions: {
-      days_requested: 730,
-    },
-  };
+  const body = hostedLinkRequest(env, flowId, kind, token);
   const link = await readPlaidResponse(LinkSchema, client.linkTokenCreate(body));
-  const url = new URL(link.hosted_link_url);
-  if (url.protocol !== "https:" || url.hostname !== "secure.plaid.com") {
-    throw new Error("Unexpected Hosted Link origin");
-  }
+  assertHostedLinkOrigin(link.hosted_link_url);
   return link;
 }
 export async function exchangeHostedLink(client: PlaidClient, linkToken: string) {
@@ -115,25 +71,29 @@ export async function readItemDetails(client: PlaidClient, token: string) {
       access_token: token,
     }),
   );
-  let institution = "Financial institution";
-  if (data.item.institution_id) {
-    const response = await readPlaidResponse(
-      InstitutionResponseSchema,
-      client.institutionsGetById({
-        institution_id: data.item.institution_id,
-        country_codes: [
-          CountryCode.Us,
-          CountryCode.Ca,
-        ],
-      }),
-    );
-    institution = response.institution.name;
-  }
+  const institution = await readInstitutionName(client, data.item.institution_id);
   return {
     institution,
     capabilities: itemCapabilities(data.item.consented_products ?? data.item.billed_products),
   };
 }
+async function readInstitutionName(client: PlaidClient, id: string | null): Promise<string> {
+  if (!id) {
+    return "Financial institution";
+  }
+  const response = await readPlaidResponse(
+    InstitutionResponseSchema,
+    client.institutionsGetById({
+      institution_id: id,
+      country_codes: [
+        CountryCode.Us,
+        CountryCode.Ca,
+      ],
+    }),
+  );
+  return response.institution.name;
+}
+
 function itemCapabilities(products: string[]): Capability[] {
   const capabilities: Capability[] = [
     "balances",
@@ -145,4 +105,72 @@ function itemCapabilities(products: string[]): Capability[] {
     capabilities.push("holdings", "investment_activity");
   }
   return capabilities;
+}
+
+function hostedLinkRequest(
+  env: Env,
+  flowId: string,
+  kind: "bank" | "investment",
+  token?: string,
+): LinkTokenCreateRequest {
+  return {
+    client_name: "Personal Finance MCP",
+    language: "en",
+    country_codes: [
+      CountryCode.Us,
+      CountryCode.Ca,
+    ],
+    user: {
+      client_user_id: z.string().min(1).parse(env.OWNER_EMAIL),
+    },
+    webhook: `${env.PUBLIC_ORIGIN}/webhooks/plaid`,
+    hosted_link: hostedLinkSettings(env, flowId),
+    ...linkAccess(kind, token),
+    transactions: {
+      days_requested: 730,
+    },
+  };
+}
+function hostedLinkSettings(env: Env, flowId: string) {
+  return {
+    completion_redirect_uri: `${env.PUBLIC_ORIGIN}/connections/plaid/complete?flow=${flowId}`,
+    url_lifetime_seconds: 1800,
+  };
+}
+function linkAccess(kind: "bank" | "investment", token: string | undefined) {
+  if (token) {
+    return {
+      access_token: token,
+    };
+  }
+  return {
+    products: requestedProducts(kind),
+    optional_products: optionalProducts(kind),
+  };
+}
+function requestedProducts(kind: "bank" | "investment"): Products[] {
+  if (kind === "bank") {
+    return [
+      Products.Transactions,
+    ];
+  }
+  return [
+    Products.Investments,
+  ];
+}
+function optionalProducts(kind: "bank" | "investment"): Products[] {
+  if (kind === "bank") {
+    return [
+      Products.Investments,
+    ];
+  }
+  return [
+    Products.Transactions,
+  ];
+}
+function assertHostedLinkOrigin(target: string): void {
+  const url = new URL(target);
+  if (url.protocol !== "https:" || url.hostname !== "secure.plaid.com") {
+    throw new Error("Unexpected Hosted Link origin");
+  }
 }

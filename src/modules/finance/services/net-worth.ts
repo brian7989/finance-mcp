@@ -13,17 +13,11 @@ export function calculateNetWorth(
       continue;
     }
     const balance = balances.find((value) => value.account_id === account.id);
-    if (
-      !balance ||
-      balance.current === null ||
-      !balance.currency ||
-      balance.completeness !== "complete"
-    ) {
+    if (!isCountableBalance(balance)) {
       missing.push(account.id);
       continue;
     }
-    const amount = netWorthAmount(account, balance.current);
-    totals.set(balance.currency, addAmounts(totals.get(balance.currency) ?? "0", amount));
+    addAccountValue(totals, account, balance);
   }
   return {
     totals: Array.from(totals, ([currency, amount]) => ({
@@ -43,4 +37,26 @@ function netWorthAmount(account: Account, amount: string): string {
     return negateAmount(amount);
   }
   return amount;
+}
+
+type CountableBalance = Balance & {
+  current: string;
+  currency: string;
+};
+function isCountableBalance(balance: Balance | undefined): balance is CountableBalance {
+  return (
+    balance !== undefined &&
+    balance.current !== null &&
+    Boolean(balance.currency) &&
+    balance.completeness === "complete"
+  );
+}
+function addAccountValue(
+  totals: Map<string, string>,
+  account: Account,
+  balance: CountableBalance,
+): void {
+  const current = totals.get(balance.currency) ?? "0";
+  const amount = netWorthAmount(account, balance.current);
+  totals.set(balance.currency, addAmounts(current, amount));
 }

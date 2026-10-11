@@ -1,5 +1,4 @@
 import { AuthenticationError } from "../../../common/errors.js";
-import type { FinanceContext } from "../../../database/context.js";
 import { saveSnapshot } from "../../../database/repositories/accounts.js";
 import {
   assertConnectionRevision,
@@ -13,11 +12,10 @@ import {
   replaceInvestmentActivity,
   saveTransactionChanges,
 } from "../../../database/repositories/transactions.js";
-import { PlaidError } from "../../integrations/plaid/client.js";
-import { createProvider } from "../../integrations/registry.js";
-import { providerCredential } from "../connections/credentials.js";
-import type { Connection } from "../schemas.js";
-import { SnapshotSchema } from "../schemas.js";
+import type { FinanceProvider, LedgerChanges } from "../../integrations/provider.js";
+import { resolveProvider } from "../../integrations/registry.js";
+import type { FinanceContext } from "../context.js";
+import { type Connection, type Snapshot, SnapshotSchema } from "../schemas.js";
 
 export type SyncResult = {
   connection_id: string;
@@ -25,64 +23,94 @@ export type SyncResult = {
 };
 
 export async function refreshConnection(context: FinanceContext, id: string): Promise<SyncResult> {
-  const original = requireConnection(context.db, id);
-  if (original.status === "disconnected") {
-    return {
-      connection_id: id,
-      ok: false,
-    };
+  const connection = requireConnection(context.db, id);
+  if (connection.status === "disconnected") {
+    return syncResult(id, false);
   }
   try {
-    await refreshProviderData(context, original);
-    return {
-      connection_id: id,
-      ok: true,
-    };
+    await refreshProviderData(context, connection);
+    return syncResult(id, true);
   } catch (error) {
-    recordFailure(context.db, original, needsReconnection(error));
-    return {
-      connection_id: id,
-      ok: false,
-    };
+    recordFailure(context.db, connection, error instanceof AuthenticationError);
+    return syncResult(id, false);
   }
 }
 async function refreshProviderData(context: FinanceContext, original: Connection): Promise<void> {
-  const credential = await providerCredential(context, original);
-  const provider = createProvider(context.env, original, credential);
-  const details = await provider.readMetadata();
-  const connection = updateConnectionMetadata(context.db, original, details);
+  const provider = await resolveProvider(context, original);
+  const connection = await refreshMetadata(context, provider, original);
   const snapshot = SnapshotSchema.parse(await provider.readSnapshot(connection));
-  assertConnectionRevision(context.db, connection);
-  context.storage.transactionSync(() => saveSnapshot(context.db, connection.id, snapshot));
-  const changes = await provider.readChanges(connection, readSyncCursor(context.db, connection.id));
-  assertConnectionRevision(context.db, connection);
+  saveSnapshotIfUnchanged(context, connection, snapshot);
+  const changes = await readLedgerChanges(context, provider, connection);
+  commitChangesAndRecordSuccess(context, connection, changes);
+}
+async function refreshMetadata(
+  context: FinanceContext,
+  provider: FinanceProvider,
+  connection: Connection,
+): Promise<Connection> {
+  const metadata = await provider.readMetadata();
+  return updateConnectionMetadata(context.db, connection, metadata);
+}
+function saveSnapshotIfUnchanged(
+  context: FinanceContext,
+  connection: Connection,
+  snapshot: Snapshot,
+): void {
   context.storage.transactionSync(() => {
-    if (changes.cash) {
-      saveTransactionChanges(context.db, connection.id, changes.cash);
-    }
-    if (changes.investments) {
-      const activity = changes.investments;
-      replaceInvestmentActivity(
-        context.db,
-        connection.id,
-        activity.transactions,
-        activity.start_date,
-        activity.end_date,
-      );
-    }
+    assertConnectionRevision(context.db, connection);
+    saveSnapshot(context.db, connection.id, snapshot);
+  });
+}
+async function readLedgerChanges(
+  context: FinanceContext,
+  provider: FinanceProvider,
+  connection: Connection,
+): Promise<LedgerChanges> {
+  const cursor = readSyncCursor(context.db, connection.id);
+  return provider.readChanges(connection, cursor);
+}
+function commitChangesAndRecordSuccess(
+  context: FinanceContext,
+  connection: Connection,
+  changes: LedgerChanges,
+): void {
+  context.storage.transactionSync(() => {
+    assertConnectionRevision(context.db, connection);
+    saveBankingChanges(context, connection, changes);
+    saveInvestmentChanges(context, connection, changes);
     recordSuccess(context.db, connection.id);
   });
 }
-function needsReconnection(error: unknown): boolean {
-  if (error instanceof AuthenticationError) {
-    return true;
+function saveBankingChanges(
+  context: FinanceContext,
+  connection: Connection,
+  changes: LedgerChanges,
+): void {
+  if (!changes.cash) {
+    return;
   }
-  return (
-    error instanceof PlaidError &&
-    [
-      "ITEM_LOGIN_REQUIRED",
-      "INVALID_ACCESS_TOKEN",
-      "ITEM_NOT_FOUND",
-    ].includes(error.code)
+  saveTransactionChanges(context.db, connection.id, changes.cash);
+}
+function saveInvestmentChanges(
+  context: FinanceContext,
+  connection: Connection,
+  changes: LedgerChanges,
+): void {
+  const activity = changes.investments;
+  if (!activity) {
+    return;
+  }
+  replaceInvestmentActivity(
+    context.db,
+    connection.id,
+    activity.transactions,
+    activity.start_date,
+    activity.end_date,
   );
+}
+function syncResult(id: string, ok: boolean): SyncResult {
+  return {
+    connection_id: id,
+    ok,
+  };
 }

@@ -55,28 +55,6 @@ export const WorkspaceSchema = z.object({
 
 export type Workspace = z.infer<typeof WorkspaceSchema>;
 
-export const DerivedBenefitSchema = z.object({
-  id: z.string(),
-  name: z.string().nullable(),
-  benefit_type: z.string().nullable(),
-  account_id: z.string(),
-  available_balance: z
-    .union([
-      z.string(),
-      z.number(),
-    ])
-    .nullable(),
-  formatted_available_balance: z.string().nullable(),
-  max_per_expense: z
-    .union([
-      z.string(),
-      z.number(),
-    ])
-    .nullable(),
-});
-
-export type DerivedBenefit = z.infer<typeof DerivedBenefitSchema>;
-
 export const workspaceIdField = identifier
   .optional()
   .describe("Workspace id; required when workspace selection is ambiguous");

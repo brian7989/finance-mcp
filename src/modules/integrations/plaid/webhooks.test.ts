@@ -1,5 +1,7 @@
 import { env } from "cloudflare:workers";
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
+import { readConfiguration } from "../../../config/env.js";
+import { createWebRouter } from "../../../transports/web/routes.js";
 import { verifyPlaidWebhook } from "./webhooks.js";
 
 afterEach(() => {
@@ -33,6 +35,35 @@ describe("signed Plaid webhooks", () => {
       .setIssuedAt()
       .sign(pair.privateKey);
     await expect(verifyPlaidWebhook(token, body, env)).resolves.toBeUndefined();
+    const routedBody = new TextEncoder().encode(
+      '{ "webhook_type": "TRANSACTIONS", "webhook_code": "SYNC_UPDATES_AVAILABLE" }',
+    );
+    const routedHash = Buffer.from(await crypto.subtle.digest("SHA-256", routedBody)).toString(
+      "hex",
+    );
+    const routedToken = await new SignJWT({
+      request_body_sha256: routedHash,
+    })
+      .setProtectedHeader({
+        alg: "ES256",
+        kid: "fixture-key",
+      })
+      .setIssuedAt()
+      .sign(pair.privateKey);
+    const response = await createWebRouter(readConfiguration(env)).fetch(
+      new Request("https://mcp.example.com/webhooks/plaid", {
+        method: "POST",
+        headers: {
+          "plaid-verification": routedToken,
+        },
+        body: routedBody,
+      }),
+      env,
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      received: true,
+    });
     await expect(
       verifyPlaidWebhook(token, new TextEncoder().encode("tampered"), env),
     ).rejects.toThrow();

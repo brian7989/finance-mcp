@@ -105,6 +105,7 @@ export function markDisconnected(db: FinanceDatabase, id: string): string {
   db.update(connections)
     .set({
       status: "disconnected",
+      last_error: "Provider disconnection is pending. Retry disconnecting.",
       revision,
     })
     .where(eq(connections.id, id))
@@ -115,6 +116,7 @@ export function clearCredential(db: FinanceDatabase, id: string, revision: strin
   db.update(connections)
     .set({
       credential: null,
+      last_error: null,
     })
     .where(and(eq(connections.id, id), eq(connections.revision, revision)))
     .run();
@@ -136,4 +138,15 @@ export function updateConnectionMetadata(
 }
 function parseConnection(row: typeof connections.$inferSelect): Connection {
   return ConnectionSchema.parse(row);
+}
+
+export function restoreConnection(db: FinanceDatabase, expected: Connection): void {
+  assertConnectionRevision(db, expected);
+  db.update(connections)
+    .set({
+      status: "connected",
+      revision: crypto.randomUUID(),
+    })
+    .where(and(eq(connections.id, expected.id), eq(connections.revision, expected.revision)))
+    .run();
 }

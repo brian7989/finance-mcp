@@ -1,40 +1,31 @@
-import type { Env } from "../../config/env.js";
-import { ownerSession } from "../../config/env.js";
+import type { FinanceContext } from "../finance/context.js";
 import type { Connection } from "../finance/schemas.js";
-import { readBenepassSnapshot } from "./benepass/provider.js";
-import { createPlaidProvider } from "./plaid/provider.js";
+import { resolveBenepassProvider } from "./benepass/provider.js";
+import { resolvePlaidProvider } from "./plaid/provider.js";
 import type { FinanceProvider } from "./provider.js";
 
-export function createProvider(
-  env: Env,
+type ProviderDefinition = {
+  resolve: (context: FinanceContext, connection: Connection) => Promise<FinanceProvider>;
+  supportsReconnect: boolean;
+};
+
+const providers = {
+  benepass: {
+    resolve: resolveBenepassProvider,
+    supportsReconnect: false,
+  },
+  plaid: {
+    resolve: resolvePlaidProvider,
+    supportsReconnect: true,
+  },
+} satisfies Record<Connection["provider"], ProviderDefinition>;
+
+export async function resolveProvider(
+  context: FinanceContext,
   connection: Connection,
-  credential?: string,
-): FinanceProvider {
-  if (connection.provider === "benepass") {
-    return {
-      async readMetadata() {
-        return {
-          institution: "Benepass",
-          capabilities: [
-            "balances",
-            "holdings",
-          ],
-        };
-      },
-      readSnapshot: () => readBenepassSnapshot(env),
-      async readChanges() {
-        return {
-          cash: null,
-          investments: null,
-        };
-      },
-      async disconnect() {
-        await ownerSession(env).logout();
-      },
-    };
-  }
-  if (!credential) {
-    throw new Error("Missing provider credential");
-  }
-  return createPlaidProvider(env, credential);
+): Promise<FinanceProvider> {
+  return providers[connection.provider].resolve(context, connection);
+}
+export function canReconnect(connection: Connection): boolean {
+  return connection.status !== "disconnected" && providers[connection.provider].supportsReconnect;
 }

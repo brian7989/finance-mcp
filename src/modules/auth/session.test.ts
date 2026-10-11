@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { readConfiguration } from "../../config/env.js";
 import { assertAllowedIdentity } from "./identity.js";
-import { assertSameOrigin } from "./oauth/browser.js";
+import { assertSameOrigin } from "./origin.js";
 import { assertOwnerCsrf, requireOwnerSession, saveOwnerSession } from "./session.js";
 
 describe("owner-only browser access", () => {

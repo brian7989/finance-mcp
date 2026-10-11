@@ -195,6 +195,51 @@ describe("durable finance history", () => {
     expect((await stub.connections()).connections[0]?.last_error).toBeNull();
     expect((await stub.connections()).connections[0]?.capabilities).toContain("transactions");
   });
+  it("records normalized provider authentication failures as reconnection requirements", async () => {
+    const stub = testStore();
+    await seedStore(stub);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json(
+          {
+            error_code: "ITEM_LOGIN_REQUIRED",
+          },
+          {
+            status: 400,
+          },
+        ),
+      ),
+    );
+    expect((await stub.syncConnection("plaid/item_1")).ok).toBe(false);
+    expect((await stub.connections()).connections[0]).toMatchObject({
+      status: "needs_reconnection",
+      last_error: "Sign in again to restore access.",
+    });
+  });
+  it("completes disconnect when Plaid reports the Item was already removed", async () => {
+    const stub = testStore();
+    await seedStore(stub);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json(
+          {
+            error_code: "ITEM_NOT_FOUND",
+          },
+          {
+            status: 400,
+          },
+        ),
+      ),
+    );
+    await stub.disconnect("plaid/item_1");
+    expect((await stub.connections()).connections[0]).toMatchObject({
+      status: "disconnected",
+      last_error: null,
+    });
+    await stub.disconnect("plaid/item_1");
+  });
   it("coalesces concurrent refreshes and never exposes stored credentials", async () => {
     const stub = testStore();
     await seedStore(stub);

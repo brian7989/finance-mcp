@@ -1,151 +1,79 @@
-import * as z from "zod";
-import { type Configuration, type Env, ownerSession, ownerStore } from "../../config/env.js";
-import { assertSameOrigin, readForm } from "../../modules/auth/oauth/browser.js";
-import { htmlResponse } from "../../modules/auth/oauth/pages.js";
+import { AuthorizationError } from "@cloudflare/workers-oauth-provider";
+import type { Configuration } from "../../config/env.js";
+import { webFactory } from "./context.js";
 import {
-  assertOwnerCsrf,
-  beginBrowserSignIn,
-  clearOwnerSession,
-  type OwnerSession,
-  requireOwnerSession,
-} from "../../modules/auth/session.js";
-import { benepassCodePage, connectionsPage, signedOutPage } from "./pages/connections.js";
+  completeBenepassLogin,
+  completePlaidLink,
+  completeSignIn,
+  disconnect,
+  receivePlaidWebhook,
+  refresh,
+  savePreference,
+  showConnections,
+  showConsentPage,
+  signIn,
+  signOut,
+  startBenepassLogin,
+  startPlaidLink,
+  submitConsent,
+} from "./handlers.js";
+import {
+  applyConfiguration,
+  limitFormBody,
+  readForm,
+  rejectHeadRequests,
+  requireOwner,
+  verifyOwnerForm,
+} from "./middleware.js";
+import { errorPage } from "./pages/consent.js";
+import { htmlResponse } from "./pages/layout.js";
 
-export async function handleWeb(
-  request: Request,
-  env: Env,
-  configuration: Configuration,
-): Promise<Response> {
-  const url = new URL(request.url);
-  if (url.pathname === "/sign-in" && request.method === "GET") {
-    return beginBrowserSignIn(configuration);
+export function createWebRouter(configuration: Configuration) {
+  const app = webFactory.createApp();
+  app.use("*", applyConfiguration(configuration), rejectHeadRequests);
+  registerSignInRoutes(app);
+  registerConnectionRoutes(app);
+  app.post("/webhooks/plaid", receivePlaidWebhook);
+  app.onError(renderFailure);
+  return app;
+}
+type WebRouter = ReturnType<typeof webFactory.createApp>;
+
+function registerSignInRoutes(app: WebRouter): void {
+  app.get("/", showConnections);
+  app.get("/connections", showConnections);
+  app.get("/sign-in", signIn);
+  app.get("/authorize", showConsentPage);
+  app.get("/callback", completeSignIn);
+  app.post("/authorize", limitFormBody, readForm, submitConsent);
+  app.post("/sign-out", ...ownerFormHandlers, signOut);
+}
+const ownerFormHandlers = webFactory.createHandlers(
+  requireOwner,
+  limitFormBody,
+  readForm,
+  verifyOwnerForm,
+);
+
+function registerConnectionRoutes(app: WebRouter): void {
+  app.get("/connections/plaid/complete", requireOwner, completePlaidLink);
+  app.post("/connections/plaid/start", ...ownerFormHandlers, startPlaidLink);
+  app.post("/connections/benepass/start", ...ownerFormHandlers, startBenepassLogin);
+  app.post("/connections/benepass/complete", ...ownerFormHandlers, completeBenepassLogin);
+  app.post("/connections/disconnect", ...ownerFormHandlers, disconnect);
+  app.post("/connections/sync", ...ownerFormHandlers, refresh);
+  app.post("/accounts/preferences", ...ownerFormHandlers, savePreference);
+}
+async function renderFailure(error: Error): Promise<Response> {
+  if (error instanceof AuthorizationError && error.redirectTo) {
+    return Response.redirect(error.redirectTo, 302);
   }
-  if (
-    [
-      "/",
-      "/connections",
-    ].includes(url.pathname) &&
-    request.method === "GET"
-  ) {
-    return showConnections(request, env, configuration);
-  }
-  const owner = await requireOwnerSession(request, configuration);
-  if (url.pathname === "/connections/plaid/complete" && request.method === "GET") {
-    await ownerStore(env).completePlaidLink(z.uuid().parse(url.searchParams.get("flow")));
-    return redirectToConnections();
-  }
-  if (request.method !== "POST") {
-    return new Response("Not found", {
-      status: 404,
+  // Preserve the body-limit status without exposing exception or credential details.
+  if ("status" in error && error.status === 413) {
+    return new Response("Form too large", {
+      status: 413,
     });
   }
-  assertSameOrigin(request, configuration);
-  const form = await readForm(request);
-  assertOwnerCsrf(form, owner);
-  return handleOwnerAction(url.pathname, form, owner, env);
-}
-async function showConnections(
-  request: Request,
-  env: Env,
-  configuration: Configuration,
-): Promise<Response> {
-  let owner: OwnerSession;
-  try {
-    owner = await requireOwnerSession(request, configuration);
-  } catch {
-    return htmlResponse(signedOutPage());
-  }
-  const data = await ownerStore(env).accounts();
-  return htmlResponse(
-    connectionsPage(
-      owner,
-      data.connections,
-      data.accounts,
-      data.preferences,
-      configuration.BENEPASS_EMAIL,
-    ),
-  );
-}
-async function handleOwnerAction(
-  path: string,
-  form: URLSearchParams,
-  owner: OwnerSession,
-  env: Env,
-): Promise<Response> {
-  switch (path) {
-    case "/connections/plaid/start":
-      return startPlaidLink(form, env);
-    case "/connections/benepass/start":
-      return startBenepassLogin(form, owner, env);
-    case "/connections/benepass/complete":
-      return completeBenepassLogin(form, owner, env);
-    case "/connections/disconnect":
-      await ownerStore(env).disconnect(requiredField(form, "connection_id"));
-      return redirectToConnections();
-    case "/connections/sync":
-      await ownerStore(env).syncConnection(requiredField(form, "connection_id"));
-      return redirectToConnections();
-    case "/accounts/preferences":
-      await saveAccountPreference(form, env);
-      return redirectToConnections();
-    case "/sign-out":
-      return clearOwnerSession();
-    default:
-      return new Response("Not found", {
-        status: 404,
-      });
-  }
-}
-async function startPlaidLink(form: URLSearchParams, env: Env): Promise<Response> {
-  const kind = z
-    .enum([
-      "bank",
-      "investment",
-    ])
-    .parse(form.get("kind"));
-  const connectionId = form.get("connection_id") ?? undefined;
-  const target = await ownerStore(env).beginPlaidLink(kind, connectionId);
-  return Response.redirect(target, 302);
-}
-async function startBenepassLogin(
-  form: URLSearchParams,
-  owner: OwnerSession,
-  env: Env,
-): Promise<Response> {
-  await ownerSession(env).startLogin(owner.flowId, form.get("registration") === "approved");
-  return htmlResponse(benepassCodePage(owner));
-}
-async function completeBenepassLogin(
-  form: URLSearchParams,
-  owner: OwnerSession,
-  env: Env,
-): Promise<Response> {
-  const code = z
-    .string()
-    .regex(/^[0-9]{6}$/)
-    .parse(form.get("otp"));
-  await ownerSession(env).completeLogin(owner.flowId, code);
-  await ownerStore(env).linkBenepass();
-  await ownerStore(env).scheduleSync();
-  return redirectToConnections();
-}
-async function saveAccountPreference(form: URLSearchParams, env: Env): Promise<void> {
-  await ownerStore(env).setPreference({
-    account_id: requiredField(form, "account_id"),
-    label: form.get("label") || null,
-    include_in_net_worth: form.has("net_worth"),
-    include_in_spending: form.has("spending"),
-  });
-}
-function requiredField(form: URLSearchParams, name: string): string {
-  return z.string().min(1).max(500).parse(form.get(name));
-}
-function redirectToConnections(): Response {
-  return new Response(null, {
-    status: 302,
-    headers: {
-      location: "/connections",
-      "cache-control": "no-store",
-    },
-  });
+  console.error("finance-mcp: web request rejected");
+  return htmlResponse(errorPage(), new Headers(), 400);
 }

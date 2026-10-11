@@ -1,19 +1,18 @@
-import { and, eq, lt } from "drizzle-orm";
 import * as z from "zod";
 import { encryptCredential } from "../../../common/utils/encryption.js";
 import { ownerSession } from "../../../config/env.js";
-import type { FinanceContext } from "../../../database/context.js";
 import {
-  assertConnectionRevision,
   requireConnection,
+  restoreConnection,
   saveConnection,
 } from "../../../database/repositories/connections.js";
-import { connections, links } from "../../../database/schema.js";
+import { removeLink, requireValidLink, saveLink } from "../../../database/repositories/links.js";
 import { createPlaidClient } from "../../integrations/plaid/client.js";
 import { createHostedLink, exchangeHostedLink } from "../../integrations/plaid/link.js";
-import { createProvider } from "../../integrations/registry.js";
+import { readPlaidCredential } from "../../integrations/plaid/provider.js";
+import { canReconnect, resolveProvider } from "../../integrations/registry.js";
+import type { FinanceContext } from "../context.js";
 import type { Connection } from "../schemas.js";
-import { providerCredential } from "./credentials.js";
 
 export async function linkBenepass(context: FinanceContext): Promise<void> {
   if (!(await ownerSession(context.env).status()).logged_in) {
@@ -33,16 +32,10 @@ export async function beginPlaidLink(
   kind: "bank" | "investment",
   connectionId?: string,
 ): Promise<string> {
-  z.enum([
-    "bank",
-    "investment",
-  ]).parse(kind);
-  z.string()
-    .regex(/^[a-f0-9]{64}$/)
-    .parse(context.env.DATA_KEY);
+  validateLinkInput(context, kind);
   const flowId = crypto.randomUUID();
   const connection = connectionId ? requireConnection(context.db, connectionId) : undefined;
-  const token = connection ? await providerCredential(context, connection) : undefined;
+  const token = connection ? await readReconnectCredential(context, connection) : undefined;
   const link = await createHostedLink(
     createPlaidClient(context.env),
     context.env,
@@ -50,44 +43,29 @@ export async function beginPlaidLink(
     kind,
     token,
   );
-  context.db.delete(links).where(lt(links.expires_at, Date.now())).run();
-  context.db
-    .insert(links)
-    .values({
-      id: flowId,
-      token: link.link_token,
-      connection_id: connectionId ?? null,
-      expires_at: Date.parse(link.expiration),
-    })
-    .run();
+  saveLink(context.db, {
+    id: flowId,
+    token: link.link_token,
+    connection_id: connectionId ?? null,
+    expires_at: Date.parse(link.expiration),
+  });
   return link.hosted_link_url;
 }
 export async function completePlaidLink(context: FinanceContext, flowId: string): Promise<void> {
   z.uuid().parse(flowId);
-  const flow = context.db.select().from(links).where(eq(links.id, flowId)).get();
-  if (!flow || flow.expires_at <= Date.now()) {
-    throw new Error("Link expired");
-  }
+  const flow = requireValidLink(context.db, flowId);
   if (flow.connection_id) {
     await completeUpdateMode(context, flow.connection_id);
   } else {
     await saveNewPlaidConnection(context, flow.token);
   }
-  context.db.delete(links).where(eq(links.id, flowId)).run();
+  removeLink(context.db, flowId);
 }
 async function completeUpdateMode(context: FinanceContext, id: string): Promise<void> {
   const previous = requireConnection(context.db, id);
-  const credential = await providerCredential(context, previous);
-  await createProvider(context.env, previous, credential).readMetadata();
-  assertConnectionRevision(context.db, previous);
-  context.db
-    .update(connections)
-    .set({
-      status: "connected",
-      revision: crypto.randomUUID(),
-    })
-    .where(and(eq(connections.id, id), eq(connections.revision, previous.revision)))
-    .run();
+  const provider = await resolveProvider(context, previous);
+  await provider.readMetadata();
+  restoreConnection(context.db, previous);
 }
 async function saveNewPlaidConnection(context: FinanceContext, linkToken: string): Promise<void> {
   const exchanged = await exchangeHostedLink(createPlaidClient(context.env), linkToken);
@@ -117,4 +95,24 @@ function newConnection(
     last_success_at: null,
     last_error: null,
   };
+}
+
+async function readReconnectCredential(
+  context: FinanceContext,
+  connection: Connection,
+): Promise<string> {
+  if (!canReconnect(connection)) {
+    throw new Error("Connection does not support this reconnect flow");
+  }
+  return readPlaidCredential(context, connection);
+}
+
+function validateLinkInput(context: FinanceContext, kind: string): void {
+  z.enum([
+    "bank",
+    "investment",
+  ]).parse(kind);
+  z.string()
+    .regex(/^[a-f0-9]{64}$/)
+    .parse(context.env.DATA_KEY);
 }

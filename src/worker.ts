@@ -1,9 +1,9 @@
 import { AuthorizationError, OAuthProvider } from "@cloudflare/workers-oauth-provider";
 import { type Configuration, type Env, ownerStore, readConfiguration } from "./config/env.js";
-import { handleAuthorization } from "./modules/auth/oauth/authorization.js";
-import { errorPage, htmlResponse } from "./modules/auth/oauth/pages.js";
-import { handlePlaidWebhook } from "./modules/integrations/plaid/webhooks.js";
 import { serveMcp } from "./transports/mcp/server.js";
+import { errorPage } from "./transports/web/pages/consent.js";
+import { htmlResponse } from "./transports/web/pages/layout.js";
+import { createWebRouter } from "./transports/web/routes.js";
 
 export { FinanceStore } from "./database/finance-store.js";
 export { BenepassSession } from "./modules/integrations/benepass/auth/session.js";
@@ -34,9 +34,6 @@ export default {
       });
     }
     try {
-      if (url.pathname === "/webhooks/plaid" && request.method === "POST") {
-        return handlePlaidWebhook(request, env);
-      }
       return await createOAuthProvider(configuration).fetch(request, env, context);
     } catch (error) {
       return safeFailure(error);
@@ -54,7 +51,7 @@ function createOAuthProvider(configuration: Configuration): OAuthProvider<Env> {
       fetch: serveMcp,
     },
     defaultHandler: {
-      fetch: (request, env) => handleAuthorization(request, env, configuration),
+      fetch: (request, env) => createWebRouter(configuration).fetch(request, env),
     },
     authorizeEndpoint: "/authorize",
     tokenEndpoint: "/oauth/token",
@@ -82,7 +79,7 @@ function readSafeConfiguration(env: Env): Configuration | undefined {
     return undefined;
   }
 }
-function safeFailure(error: unknown): Response {
+async function safeFailure(error: unknown): Promise<Response> {
   if (error instanceof AuthorizationError && error.redirectTo) {
     return Response.redirect(error.redirectTo, 302);
   }

@@ -6,6 +6,7 @@ import {
   completePlaidLink,
   linkBenepass,
 } from "../modules/finance/connections/link.js";
+import type { FinanceContext } from "../modules/finance/context.js";
 import { PreferenceSchema, QuerySchema } from "../modules/finance/schemas.js";
 import { summarizeNetWorth } from "../modules/finance/services/queries.js";
 import { refreshConnection, type SyncResult } from "../modules/finance/sync/refresh.js";
@@ -15,7 +16,6 @@ import {
   scheduleConnection,
 } from "../modules/finance/sync/scheduling.js";
 import { createDatabase } from "./client.js";
-import type { FinanceContext } from "./context.js";
 import { migrateStorage } from "./migrations.js";
 import { listStoredAccounts } from "./repositories/accounts.js";
 import { listBalanceHistory, listLatestBalances } from "./repositories/balances.js";

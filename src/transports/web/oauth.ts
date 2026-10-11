@@ -1,73 +1,35 @@
 import { authorizationErrorRedirect } from "@cloudflare/workers-oauth-provider";
 import * as z from "zod";
-import type { Configuration, Env } from "../../../config/env.js";
-import { handleWeb } from "../../../transports/web/routes.js";
+import type { Configuration, Env } from "../../config/env.js";
 import {
   createIdentityProof,
   type IdentityProof,
   identityAuthorizeUrl,
   verifyIdentityCode,
-} from "../identity.js";
-import { completeBrowserSignIn, saveOwnerSession } from "../session.js";
-import { assertSameOrigin, readForm } from "./browser.js";
-import { consentPage, htmlResponse } from "./pages.js";
+} from "../../modules/auth/identity.js";
+import { saveOwnerSession } from "../../modules/auth/session.js";
+import { consentPage } from "./pages/consent.js";
+import { htmlResponse } from "./pages/layout.js";
 
-export async function handleAuthorization(
-  request: Request,
-  env: Env,
-  configuration: Configuration,
-): Promise<Response> {
-  const path = new URL(request.url).pathname;
-  if (path === "/authorize" && request.method === "GET") {
-    return showConsent(request, env);
-  }
-  if (path === "/authorize" && request.method === "POST") {
-    return approveOrDeny(request, env, configuration);
-  }
-  if (path === "/callback" && request.method === "GET") {
-    return (
-      (await completeBrowserSignIn(request, configuration)) ??
-      completeIdentity(request, env, configuration)
-    );
-  }
-  return handleWeb(request, env, configuration);
-}
-async function showConsent(request: Request, env: Env): Promise<Response> {
+export async function showConsent(request: Request, env: Env): Promise<Response> {
   const original = await env.OAUTH_PROVIDER.parseAuthRequest(request);
   const details = await env.OAUTH_PROVIDER.describeConsent(original);
   const consent = await env.OAUTH_PROVIDER.beginConsent(original);
   return htmlResponse(consentPage(details, consent.handle), consent.headers);
 }
-async function approveOrDeny(
+export async function approveOrDeny(
   request: Request,
   env: Env,
   configuration: Configuration,
+  form: URLSearchParams,
 ): Promise<Response> {
-  assertSameOrigin(request, configuration);
-  const form = await readForm(request);
   const handle = z.string().min(1).max(1024).parse(form.get("handle"));
   if (form.get("decision") !== "approve") {
-    const denied = await env.OAUTH_PROVIDER.denyConsent(request, handle);
-    return redirectResponse(denied.headers);
+    return denyConsent(request, env, handle);
   }
-  const approved = await env.OAUTH_PROVIDER.approveConsent(request, handle, {
-    scope: [
-      "finance:read",
-      "offline_access",
-    ],
-  });
-  const proof = createIdentityProof();
-  const upstream = await env.OAUTH_PROVIDER.beginUpstream(approved.request, {
-    data: proof,
-    headers: approved.headers,
-  });
-  upstream.headers.set(
-    "location",
-    await identityAuthorizeUrl(configuration, upstream.state, proof),
-  );
-  return redirectResponse(upstream.headers);
+  return approveConsent(request, env, configuration, handle);
 }
-async function completeIdentity(
+export async function completeIdentity(
   request: Request,
   env: Env,
   configuration: Configuration,
@@ -93,6 +55,33 @@ async function completeIdentity(
   await saveOwnerSession(resumed.headers, subject, configuration);
   resumed.headers.set("location", result.redirectTo);
   return redirectResponse(resumed.headers);
+}
+async function denyConsent(request: Request, env: Env, handle: string): Promise<Response> {
+  const denied = await env.OAUTH_PROVIDER.denyConsent(request, handle);
+  return redirectResponse(denied.headers);
+}
+async function approveConsent(
+  request: Request,
+  env: Env,
+  configuration: Configuration,
+  handle: string,
+): Promise<Response> {
+  const approved = await env.OAUTH_PROVIDER.approveConsent(request, handle, {
+    scope: [
+      "finance:read",
+      "offline_access",
+    ],
+  });
+  const proof = createIdentityProof();
+  const upstream = await env.OAUTH_PROVIDER.beginUpstream(approved.request, {
+    data: proof,
+    headers: approved.headers,
+  });
+  upstream.headers.set(
+    "location",
+    await identityAuthorizeUrl(configuration, upstream.state, proof),
+  );
+  return redirectResponse(upstream.headers);
 }
 function redirectResponse(headers: Headers): Response {
   headers.set("cache-control", "no-store");

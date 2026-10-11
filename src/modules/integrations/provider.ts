@@ -14,11 +14,13 @@ export type LedgerChanges = {
   cash: TransactionChanges | null;
   investments: InvestmentChanges | null;
 };
+export type ProviderMetadata = {
+  institution: string;
+  capabilities: Connection["capabilities"];
+};
+
 export interface FinanceProvider {
-  readMetadata(): Promise<{
-    institution: string;
-    capabilities: Connection["capabilities"];
-  }>;
+  readMetadata(): Promise<ProviderMetadata>;
   readSnapshot(connection: Connection): Promise<Snapshot>;
   readChanges(connection: Connection, cursor: string | null): Promise<LedgerChanges>;
   disconnect(): Promise<void>;

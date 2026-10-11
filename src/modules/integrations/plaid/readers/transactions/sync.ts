@@ -1,3 +1,4 @@
+import type * as z from "zod";
 import type { Transaction } from "../../../../finance/schemas.js";
 import type { TransactionChanges } from "../../../provider.js";
 import { type PlaidClient, PlaidError, readPlaidResponse } from "../../client.js";
@@ -14,10 +15,7 @@ export async function readTransactionChanges(
     try {
       return await readAllSyncPages(client, token, connectionId, cursor);
     } catch (error) {
-      if (
-        !(error instanceof PlaidError) ||
-        error.code !== "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION"
-      ) {
+      if (!isPaginationMutation(error)) {
         throw error;
       }
     }
@@ -30,48 +28,76 @@ async function readAllSyncPages(
   connectionId: string,
   initialCursor: string | null,
 ): Promise<TransactionChanges> {
-  const transactions = new Map<string, Transaction>();
-  const removed = new Set<string>();
+  const state: SyncState = {
+    transactions: new Map(),
+    removed: new Set(),
+  };
   let cursor = initialCursor;
-  // Bound each run; never persist a cursor without its corresponding complete update.
+  // Never persist a cursor without its corresponding complete update.
   for (let page = 0; page < 20; page++) {
-    const response = await readPlaidResponse(
-      SyncResponseSchema,
-      client.transactionsSync({
-        access_token: token,
-        ...(cursor
-          ? {
-              cursor,
-            }
-          : {}),
-        count: 500,
-      }),
-    );
-    for (const value of [
-      ...response.added,
-      ...response.modified,
-    ]) {
-      const transaction = mapPlaidTransaction(value, connectionId);
-      transactions.set(transaction.id, transaction);
-      removed.delete(transaction.id);
-    }
-    for (const value of response.removed) {
-      const id = accountId(connectionId, value.transaction_id);
-      transactions.delete(id);
-      removed.add(id);
-    }
+    const response = await readSyncPage(client, token, cursor);
+    applySyncPage(state, response, connectionId);
     cursor = response.next_cursor;
     if (!response.has_more) {
-      return {
-        transactions: [
-          ...transactions.values(),
-        ],
-        removed: [
-          ...removed,
-        ],
-        cursor,
-      };
+      return completedChanges(state, cursor);
     }
   }
   throw new PlaidError("SYNC_PAGE_LIMIT");
+}
+
+type SyncPage = z.infer<typeof SyncResponseSchema>;
+type SyncState = {
+  transactions: Map<string, Transaction>;
+  removed: Set<string>;
+};
+function applySyncPage(state: SyncState, response: SyncPage, connectionId: string): void {
+  for (const value of [
+    ...response.added,
+    ...response.modified,
+  ]) {
+    const transaction = mapPlaidTransaction(value, connectionId);
+    state.transactions.set(transaction.id, transaction);
+    state.removed.delete(transaction.id);
+  }
+  for (const value of response.removed) {
+    const id = accountId(connectionId, value.transaction_id);
+    state.transactions.delete(id);
+    state.removed.add(id);
+  }
+}
+
+function isPaginationMutation(error: unknown): boolean {
+  return (
+    error instanceof PlaidError && error.code === "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION"
+  );
+}
+
+async function readSyncPage(
+  client: PlaidClient,
+  token: string,
+  cursor: string | null,
+): Promise<SyncPage> {
+  return readPlaidResponse(
+    SyncResponseSchema,
+    client.transactionsSync({
+      access_token: token,
+      ...(cursor
+        ? {
+            cursor,
+          }
+        : {}),
+      count: 500,
+    }),
+  );
+}
+function completedChanges(state: SyncState, cursor: string): TransactionChanges {
+  return {
+    transactions: [
+      ...state.transactions.values(),
+    ],
+    removed: [
+      ...state.removed,
+    ],
+    cursor,
+  };
 }

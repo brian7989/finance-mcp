@@ -1,12 +1,7 @@
 import type { ApiGetOptions, BenepassClient } from "../client.js";
 import { PATHS } from "../constants.js";
 import { parseItems } from "../parsing.js";
-import {
-  type Account,
-  AccountSchema,
-  type Balance,
-  type DerivedBenefit,
-} from "../schemas/accounts.js";
+import { type Account, AccountSchema, type Balance } from "../schemas/accounts.js";
 
 const HSA_TYPE_VALUES = new Set([
   "hsa",
@@ -57,56 +52,10 @@ function isPrimaryBalance(balance: Balance): boolean {
   return !balance.key.includes("reimbursement") && !balance.key.includes("payout");
 }
 
-export function deriveBenefits(accounts: Account[]): DerivedBenefit[] {
-  const benefits: DerivedBenefit[] = [];
-  for (const account of accounts) {
-    const benefit = deriveBenefitFromAccount(account);
-    if (benefit) {
-      benefits.push(benefit);
-    }
-  }
-  return benefits;
-}
-
-function deriveBenefitFromAccount(account: Account): DerivedBenefit | undefined {
-  const benefit = account.enrollment?.benefit;
-  if (!benefit) {
-    return undefined;
-  }
-  const available = availableBalance(account.balances);
-  return {
-    id: benefit.id,
-    name: benefit.name ?? null,
-    benefit_type: benefit.benefit_type ?? null,
-    account_id: account.id,
-    available_balance: available?.amount ?? null,
-    formatted_available_balance: available?.formatted_local_amount ?? null,
-    max_per_expense: maxExpenseAmount(account),
-  };
-}
-
-function maxExpenseAmount(account: Account): string | number | null {
-  return (
-    account.enrollment?.local_max_expense_amount ?? account.enrollment?.max_expense_amount ?? null
-  );
-}
-
 export async function listAccounts(
   api: BenepassClient,
   options: ApiGetOptions = {},
 ): Promise<Account[]> {
   const payload = await api.getJson(PATHS.accounts, options);
   return parseItems(AccountSchema, payload, "accounts");
-}
-
-export async function listBenefits(
-  api: BenepassClient,
-  options: ApiGetOptions = {},
-): Promise<{
-  data: DerivedBenefit[];
-}> {
-  const accounts = await listAccounts(api, options);
-  return {
-    data: deriveBenefits(accounts),
-  };
 }

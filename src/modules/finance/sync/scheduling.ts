@@ -1,10 +1,10 @@
 import { and, eq, sql } from "drizzle-orm";
-import type { FinanceContext } from "../../../database/context.js";
 import {
   listStoredConnections,
   requireConnection,
 } from "../../../database/repositories/connections.js";
 import { syncJobs } from "../../../database/schema.js";
+import type { FinanceContext } from "../context.js";
 
 export async function scheduleAllConnections(context: FinanceContext): Promise<void> {
   const connections = listStoredConnections(context.db).filter(
