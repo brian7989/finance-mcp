@@ -1,19 +1,24 @@
 import { fixtureAccount, fixtureConnection } from "../../../../test/finance-fixtures.js";
 import { connectionsPage } from "./connections.js";
-import { htmlResponse } from "./layout.js";
+import { htmlResponse, interactiveHtmlResponse } from "./layout.js";
 
-describe("escaped financial templates", () => {
-  it("escapes provider names and account labels while preserving composed forms", async () => {
-    const owner = {
-      subject: "fixture-owner",
-      email: "owner@example.com",
-      csrf: crypto.randomUUID(),
-      flowId: crypto.randomUUID(),
-    };
+const owner = {
+  subject: "fixture-owner",
+  email: "owner@example.com",
+  csrf: crypto.randomUUID(),
+  flowId: crypto.randomUUID(),
+};
+
+describe("owner-only React page shell", () => {
+  it("preserves hostile labels as inert JSON and omits archived accounts and provider IDs", async () => {
     const account = {
       ...fixtureAccount(),
-      name: "<script>private()</script>",
+      name: "</script><script>private()</script>",
       mask: null,
+    };
+    const connection = {
+      ...fixtureConnection(),
+      institution: "<script>bank()</script>",
     };
     const preference = {
       account_id: account.id,
@@ -21,11 +26,7 @@ describe("escaped financial templates", () => {
       include_in_net_worth: false,
       include_in_spending: true,
     };
-    const connection = {
-      ...fixtureConnection(),
-      institution: "<script>bank()</script>",
-    };
-    const response = await htmlResponse(
+    const response = await interactiveHtmlResponse(
       connectionsPage(
         owner,
         [
@@ -41,31 +42,52 @@ describe("escaped financial templates", () => {
         ],
         [
           preference,
+          {
+            ...preference,
+            account_id: "archived-fixture",
+          },
         ],
       ),
     );
-    expect(response.headers.get("referrer-policy")).toBe("same-origin");
-    expect(response.headers.get("content-security-policy")).toContain(
-      "form-action 'self' https://secure.plaid.com;",
-    );
     const body = await response.text();
-    const css = body.match(/<style>([\s\S]*?)<\/style>/)?.[1];
-    expect(css).toBeDefined();
-    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(css));
-    const hash = btoa(String.fromCharCode(...new Uint8Array(digest)));
-    expect(response.headers.get("content-security-policy")).toContain(`style-src 'sha256-${hash}'`);
-    expect(response.headers.get("content-security-policy")).not.toContain("unsafe-inline");
-    expect(body).not.toContain("<script>");
-    expect(body).toContain("Account number unavailable");
+    const json = body.match(
+      /<script id="connections-data" type="application\/json">([\s\S]*?)<\/script>/,
+    )?.[1];
+    expect(json).toBeDefined();
+    const data = JSON.parse(json ?? "{}");
+    expect(data.accounts).toHaveLength(1);
+    expect(data.accounts[0]).toMatchObject({
+      name: account.name,
+      mask: null,
+    });
+    expect(data.preferences).toEqual([
+      preference,
+    ]);
+    expect(data.connections[0].institution).toBe(connection.institution);
+    expect(data.csrf).toBe(owner.csrf);
+    expect(body).not.toContain("<script>private()");
     expect(body).not.toContain("Archived fixture");
-    expect(body).toContain("Connect institution");
-    expect(body).not.toContain('name="kind"');
-    expect(body).not.toContain("<select");
-    expect(body).toContain("&lt;script&gt;");
-    expect(body).not.toContain('value="" autofocus');
-    expect(body).toContain('action="/connections/disconnect"');
-    expect(body).toContain(`name="csrf" value="${owner.csrf}"`);
-    expect(body).toContain('name="net_worth" >');
-    expect(body).toContain('name="spending" checked>');
+    expect(body).not.toContain("provider_account_id");
+    expect(body).not.toContain("revision");
+    expect(body).not.toContain(owner.email);
+    expect(body).toContain('src="/assets/app.js"');
+    expect(body).toContain('href="/assets/app.css"');
+  });
+  it("allows only same-origin scripts and style attributes needed by Radix", async () => {
+    const response = await interactiveHtmlResponse(connectionsPage(owner, [], [], []));
+    const policy = response.headers.get("content-security-policy");
+    expect(policy).toContain("script-src 'self'");
+    expect(policy).toContain("style-src 'self'");
+    expect(policy).toContain("style-src-attr 'unsafe-inline'");
+    expect(policy).not.toContain("script-src 'unsafe-inline'");
+    expect(policy).toContain("form-action 'self' https://secure.plaid.com;");
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("referrer-policy")).toBe("same-origin");
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+  });
+  it("keeps sign-in and consent pages free of executable scripts", async () => {
+    const response = await htmlResponse("Static consent");
+    expect(response.headers.get("content-security-policy")).not.toContain("script-src");
+    expect(response.headers.get("content-security-policy")).not.toContain("unsafe-inline");
   });
 });

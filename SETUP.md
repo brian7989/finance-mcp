@@ -11,7 +11,7 @@ pnpm check
 
 Tests use synthetic data in Cloudflare's local runtime and never require bank credentials. Formatting uses Biome; typed ESLint rejects deprecated APIs.
 
-Hono declares HTTP routes, composes named middleware, and renders escaped HTML fragments. Owner-session and CSRF checks remain explicit, while signed webhooks retain their original bytes.
+Hono declares HTTP routes and composes named middleware. React renders the connections interface with shadcn/ui components and Tailwind. Vite builds browser assets served by the same Worker. Owner-only HTML supplies a minimal, escaped data snapshot; native forms use the existing authenticated routes. Owner-session and CSRF checks remain explicit, while signed webhooks retain their original bytes. Run `pnpm dev` for local Workers development; it builds browser assets first. After changing the frontend, restart it or run `pnpm build:client`. The deploy and check commands also build assets.
 
 The official Plaid SDK handles API requests through Axios’s Workers-compatible fetch adapter. openid-client handles upstream OIDC, big.js handles decimal arithmetic, and Drizzle manages typed SQLite queries and versioned migrations. A typed registry selects provider factories. Adapters own credential resolution, provider errors, and disconnection behavior; connection workflows, refresh scheduling, and storage repositories stay separate.
 

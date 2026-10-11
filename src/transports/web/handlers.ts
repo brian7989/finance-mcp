@@ -10,7 +10,7 @@ import { handlePlaidWebhook } from "../../modules/integrations/plaid/webhooks.js
 import type { WebContext } from "./context.js";
 import { approveOrDeny, completeIdentity, showConsent } from "./oauth.js";
 import { benepassCodePage, connectionsPage, signedOutPage } from "./pages/connections.js";
-import { htmlResponse } from "./pages/layout.js";
+import { htmlResponse, interactiveHtmlResponse } from "./pages/layout.js";
 
 export async function signIn(context: WebContext): Promise<Response> {
   return beginBrowserSignIn(context.var.configuration);
@@ -21,7 +21,7 @@ export async function showConnections(context: WebContext): Promise<Response> {
     return htmlResponse(signedOutPage());
   }
   const data = await ownerStore(context.env).accounts();
-  return htmlResponse(
+  return interactiveHtmlResponse(
     connectionsPage(
       owner,
       data.connections,

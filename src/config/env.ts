@@ -4,6 +4,7 @@ import type { FinanceStore } from "../database/finance-store.js";
 import type { BenepassSession } from "../modules/integrations/benepass/auth/session.js";
 
 export interface Env {
+  ASSETS: Fetcher;
   OAUTH_KV: KVNamespace;
   OAUTH_PROVIDER: OAuthHelpers;
   BENEPASS_SESSION: DurableObjectNamespace<BenepassSession>;

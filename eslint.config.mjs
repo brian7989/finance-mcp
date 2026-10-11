@@ -10,6 +10,8 @@ export default defineConfig(
   {
     files: [
       "src/**/*.ts",
+      "src/**/*.tsx",
+      "vite.config.ts",
       "test/**/*.ts",
       "vitest.config.ts",
       "drizzle.config.ts",
@@ -31,6 +33,18 @@ export default defineConfig(
     },
     rules: {
       "@typescript-eslint/no-deprecated": "error",
+    },
+  },
+  {
+    files: [
+      "src/transports/web/client/**/*.ts",
+      "src/transports/web/client/**/*.tsx",
+    ],
+    languageOptions: {
+      parserOptions: {
+        projectService: false,
+        project: "./tsconfig.client.json",
+      },
     },
   },
 );

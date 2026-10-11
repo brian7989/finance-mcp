@@ -8,7 +8,7 @@ The connector saves daily balance observations, banking transactions, and invest
 
 Disconnected accounts leave personal totals while their history stays available. Account preferences let you name accounts and exclude them from your personal net worth or spending analysis. Connecting an account does not transfer funds or authorize trading. Credentials and connection settings stay in the owner-only browser interface.
 
-One Cloudflare Worker serves the MCP endpoint and account-management pages. SQLite-backed Durable Objects store financial history and coordinate refreshes; KV supports OAuth. No external database or paid Cloudflare service is required within the Free plan limits.
+The private account-management interface uses React and shadcn/ui, with compact institution lists, account preference panels, and a single connection dialog. One Cloudflare Worker serves the frontend and MCP endpoint. SQLite-backed Durable Objects store financial history and coordinate refreshes; KV supports OAuth. No external database or paid Cloudflare service is required within the Free plan limits.
 
 Plaid is a separate service: its free Trial currently allows ten created production connections. Approval and institution coverage must be verified; deleting a connection does not restore its Trial slot.
 

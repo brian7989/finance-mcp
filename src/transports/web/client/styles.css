@@ -1,0 +1,153 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--background);
+  --color-card-foreground: var(--foreground);
+  --color-popover: var(--background);
+  --color-popover-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--muted);
+  --color-secondary-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--muted);
+  --color-accent-foreground: var(--foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--border);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+:root {
+  --background: #ffffff;
+  --foreground: #24252b;
+  --primary: #24252b;
+  --primary-foreground: #ffffff;
+  --muted: #f4f5f7;
+  --muted-foreground: #6b707b;
+  --destructive: #b43d3d;
+  --border: #e7e9ed;
+  --ring: #9096a2;
+  --sidebar: #f8f9fb;
+  --radius: 0.625rem;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+  color-scheme: light;
+}
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply m-0 bg-background text-foreground;
+  }
+  button,
+  [role="button"] {
+    cursor: pointer;
+  }
+  input,
+  button {
+    font: inherit;
+  }
+}
+.loading-message {
+  padding: 3rem;
+  color: var(--muted-foreground);
+}
+.auth-shell {
+  max-width: 30rem;
+  margin: 0 auto;
+  padding: 3rem 1.5rem;
+}
+.auth-brand {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+.auth-panel {
+  margin: 3.5rem 0;
+}
+.auth-panel h1 {
+  font-size: 1.75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.04em;
+}
+.auth-panel p {
+  margin: 1rem 0;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  line-height: 1.65;
+}
+.auth-panel .eyebrow {
+  margin-bottom: 0.75rem;
+  font-size: 0.75rem;
+}
+.auth-panel form {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+.auth-panel .field {
+  display: grid;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+.auth-panel input:not([type="hidden"]) {
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.75rem;
+}
+.auth-panel button,
+.auth-panel .button {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 0.5rem;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-size: 0.875rem;
+  padding: 0.65rem 1rem;
+  text-decoration: none;
+}
+.auth-panel button[value="deny"] {
+  background: var(--muted);
+  color: var(--foreground);
+}
+.auth-panel a:not(.button) {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.auth-footer {
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: Honor reduced motion above component utilities. */
+    animation-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: Honor reduced motion above component utilities. */
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (pointer: coarse) {
+  [data-slot="button"],
+  [data-slot="tabs-trigger"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}

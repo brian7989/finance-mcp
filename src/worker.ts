@@ -12,6 +12,9 @@ export { BenepassSession } from "./modules/integrations/benepass/auth/session.js
 export default {
   async fetch(request: Request, env: Env, context: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+    if (url.pathname.startsWith("/assets/")) {
+      return serveAsset(request, env);
+    }
     if (url.pathname === "/health" && request.method === "GET") {
       return Response.json({
         ok: true,
@@ -88,4 +91,17 @@ async function safeFailure(error: unknown): Promise<Response> {
   }
   console.error("finance-mcp: request failed");
   return htmlResponse(errorPage(), new Headers(), 400);
+}
+
+async function serveAsset(request: Request, env: Env): Promise<Response> {
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    return new Response(null, {
+      status: 405,
+    });
+  }
+  const asset = await env.ASSETS.fetch(request);
+  const response = new Response(asset.body, asset);
+  response.headers.set("cache-control", "no-cache");
+  response.headers.set("x-content-type-options", "nosniff");
+  return response;
 }
