@@ -1,0 +1,42 @@
+{
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "suspicious": {
+        "noExplicitAny": "error",
+        "noDeprecatedImports": "error"
+      },
+      "style": {
+        "useBlockStatements": "error",
+        "noNestedTernary": "error"
+      }
+    }
+  },
+  "files": {
+    "includes": [
+      "**",
+      "!dist",
+      "!node_modules",
+      "!pnpm-lock.yaml",
+      "!.wrangler"
+    ]
+  },
+  "$schema": "https://biomejs.dev/schemas/2.5.10/schema.json",
+  "javascript": {
+    "formatter": {
+      "expand": "always"
+    }
+  },
+  "json": {
+    "formatter": {
+      "expand": "always"
+    }
+  }
+}

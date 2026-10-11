@@ -1,0 +1,150 @@
+import * as z from "zod";
+import type { Env } from "../../config.js";
+import type { Capability } from "../../finance/schemas.js";
+import type { PlaidClient } from "./client.js";
+import { InstitutionResponseSchema, ItemResponseSchema } from "./schemas.js";
+
+const LinkSchema = z.object({
+  link_token: z.string(),
+  hosted_link_url: z.url(),
+  expiration: z.iso.datetime(),
+});
+const ExchangeSchema = z.object({
+  access_token: z.string(),
+  item_id: z.string(),
+});
+const SessionSchema = z.object({
+  link_sessions: z.array(
+    z.object({
+      results: z
+        .object({
+          item_add_results: z
+            .array(
+              z.object({
+                public_token: z.string(),
+              }),
+            )
+            .optional(),
+        })
+        .nullish(),
+    }),
+  ),
+});
+
+export async function createHostedLink(
+  client: PlaidClient,
+  env: Env,
+  flowId: string,
+  kind: "bank" | "investment",
+  token?: string,
+) {
+  const products =
+    kind === "bank"
+      ? [
+          "transactions",
+        ]
+      : [
+          "investments",
+        ];
+  const body = {
+    client_name: "Personal Finance MCP",
+    language: "en",
+    country_codes: [
+      "US",
+      "CA",
+    ],
+    user: {
+      client_user_id: env.OWNER_EMAIL,
+    },
+    webhook: `${env.PUBLIC_ORIGIN}/webhooks/plaid`,
+    hosted_link: {
+      completion_redirect_uri: `${env.PUBLIC_ORIGIN}/connections/plaid/complete?flow=${flowId}`,
+      url_lifetime_seconds: 1800,
+    },
+    ...(token
+      ? {
+          access_token: token,
+        }
+      : {
+          products,
+          optional_products:
+            kind === "bank"
+              ? [
+                  "investments",
+                ]
+              : [
+                  "transactions",
+                ],
+        }),
+    transactions: {
+      days_requested: 730,
+    },
+  };
+  const link = await client("/link/token/create", body, LinkSchema);
+  const url = new URL(link.hosted_link_url);
+  if (url.protocol !== "https:" || url.hostname !== "secure.plaid.com") {
+    throw new Error("Unexpected Hosted Link origin");
+  }
+  return link;
+}
+export async function exchangeHostedLink(client: PlaidClient, linkToken: string) {
+  const session = await client(
+    "/link/token/get",
+    {
+      link_token: linkToken,
+    },
+    SessionSchema,
+  );
+  const tokens = session.link_sessions.flatMap((value) => value.results?.item_add_results ?? []);
+  if (tokens.length !== 1 || !tokens[0]) {
+    throw new Error("Link has not completed or contains multiple items");
+  }
+  const exchanged = await client(
+    "/item/public_token/exchange",
+    {
+      public_token: tokens[0].public_token,
+    },
+    ExchangeSchema,
+  );
+  return exchanged;
+}
+export async function readItemDetails(client: PlaidClient, token: string) {
+  const data = await client(
+    "/item/get",
+    {
+      access_token: token,
+    },
+    ItemResponseSchema,
+  );
+  let institution = "Financial institution";
+  if (data.item.institution_id) {
+    const response = await client(
+      "/institutions/get_by_id",
+      {
+        institution_id: data.item.institution_id,
+        country_codes: [
+          "US",
+          "CA",
+        ],
+      },
+      InstitutionResponseSchema,
+    );
+    institution = response.institution.name;
+  }
+  return {
+    institution,
+    capabilities: itemCapabilities(data.item.consented_products ?? data.item.billed_products),
+  };
+}
+function itemCapabilities(products: string[]): Capability[] {
+  const capabilities: Capability[] = [
+    "balances",
+  ];
+  if (products.includes("transactions")) {
+    capabilities.push("transactions");
+  }
+  if (products.includes("investments")) {
+    capabilities.push("holdings", "investment_activity");
+  }
+  return capabilities;
+}

@@ -1,0 +1,35 @@
+import { defineConfig } from "eslint/config";
+import tseslint from "typescript-eslint";
+export default defineConfig(
+  {
+    ignores: [
+      "dist/**",
+      ".wrangler/**",
+    ],
+  },
+  {
+    files: [
+      "src/**/*.ts",
+      "test/**/*.ts",
+      "vitest.config.ts",
+      "eslint.config.mjs",
+    ],
+    languageOptions: {
+      parser: tseslint.parser,
+      parserOptions: {
+        projectService: {
+          allowDefaultProject: [
+            "*.mjs",
+          ],
+        },
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    plugins: {
+      "@typescript-eslint": tseslint.plugin,
+    },
+    rules: {
+      "@typescript-eslint/no-deprecated": "error",
+    },
+  },
+);
