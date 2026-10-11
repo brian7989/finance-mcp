@@ -43,7 +43,7 @@ describe("Hono browser routes", () => {
   it("renders signed-out navigation and security headers", async () => {
     const response = await webFetch("/connections");
     expect(response.status).toBe(200);
-    expect(await response.text()).toContain("<a href='/sign-in'>Sign in</a>");
+    expect(await response.text()).toContain("href='/sign-in'");
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
   });

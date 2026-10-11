@@ -43,6 +43,12 @@ describe("escaped financial templates", () => {
       "form-action 'self' https://secure.plaid.com;",
     );
     const body = await response.text();
+    const css = body.match(/<style>([\s\S]*?)<\/style>/)?.[1];
+    expect(css).toBeDefined();
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(css));
+    const hash = btoa(String.fromCharCode(...new Uint8Array(digest)));
+    expect(response.headers.get("content-security-policy")).toContain(`style-src 'sha256-${hash}'`);
+    expect(response.headers.get("content-security-policy")).not.toContain("unsafe-inline");
     expect(body).not.toContain("<script>");
     expect(body).toContain("&lt;script&gt;");
     expect(body).not.toContain('value="" autofocus');
