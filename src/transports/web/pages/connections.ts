@@ -186,10 +186,11 @@ function accountsSection(
   accounts: Account[],
   preferences: Preference[],
 ): HtmlTemplate {
+  const activeAccounts = accounts.filter((account) => account.active);
   return html`<section class="account-section" aria-labelledby="accounts-heading">
-    ${sectionHeading("accounts-heading", "Account preferences", accounts.length)}
+    ${sectionHeading("accounts-heading", "Account preferences", activeAccounts.length)}
     <p class="section-intro">Rename accounts or exclude them from your personal totals and spending reports.</p>
-    ${accountPreferences(owner, connections, accounts, preferences)}
+    ${accountPreferences(owner, connections, activeAccounts, preferences)}
   </section>`;
 }
 function accountPreferences(
@@ -219,7 +220,7 @@ function accountDisclosure(
   return html`<details class="account"><summary><span class="account-title">
     <span class="account-name">${preference?.label || account.name}</span>
     <span class="account-meta">${institution} · ${account.subtype ?? account.type}${account.active ? "" : " · Inactive"}</span></span>
-    <span class="account-mask">${account.mask ? html`••${account.mask}` : ""}</span>
+    <span class="account-mask">${account.mask ? html`••${account.mask}` : "Account number unavailable"}</span>
   </summary>${preferenceForm(owner, account, preference)}</details>`;
 }
 function preferenceForm(

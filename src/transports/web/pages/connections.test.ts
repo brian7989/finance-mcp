@@ -13,6 +13,7 @@ describe("escaped financial templates", () => {
     const account = {
       ...fixtureAccount(),
       name: "<script>private()</script>",
+      mask: null,
     };
     const preference = {
       account_id: account.id,
@@ -32,6 +33,11 @@ describe("escaped financial templates", () => {
         ],
         [
           account,
+          {
+            ...fixtureAccount("archived-fixture"),
+            name: "Archived fixture",
+            active: false,
+          },
         ],
         [
           preference,
@@ -50,6 +56,8 @@ describe("escaped financial templates", () => {
     expect(response.headers.get("content-security-policy")).toContain(`style-src 'sha256-${hash}'`);
     expect(response.headers.get("content-security-policy")).not.toContain("unsafe-inline");
     expect(body).not.toContain("<script>");
+    expect(body).toContain("Account number unavailable");
+    expect(body).not.toContain("Archived fixture");
     expect(body).toContain("Connect institution");
     expect(body).not.toContain('name="kind"');
     expect(body).not.toContain("<select");

@@ -9,6 +9,7 @@ import {
 } from "../../test/finance-fixtures.js";
 import { encryptCredential } from "../common/utils/encryption.js";
 import { createDatabase } from "./client.js";
+import removeCombinedHsa from "./migrations/0001_remove_combined_hsa.sql";
 import { saveSnapshot } from "./repositories/accounts.js";
 import { readSyncCursor, saveConnection } from "./repositories/connections.js";
 import { saveTransactionChanges } from "./repositories/transactions.js";
@@ -36,7 +37,7 @@ async function seedStore(stub: ReturnType<typeof testStore>): Promise<void> {
   });
 }
 describe("durable finance history", () => {
-  it("retires a combined HSA account without losing history or counting it twice", async () => {
+  it("retires a combined HSA account and removes only its archived data without double counting", async () => {
     const stub = testStore();
     const parent = {
       ...fixtureAccount("benepass/workspace/hsa", "hsa"),
@@ -97,6 +98,23 @@ describe("durable finance history", () => {
       },
     ]);
     expect((await stub.balanceHistory({})).observations).toHaveLength(3);
+    await runInDurableObject(stub, async (_instance, context) => {
+      context.storage.transactionSync(() => {
+        for (const statement of removeCombinedHsa.split("--> statement-breakpoint")) {
+          context.storage.sql.exec(statement);
+        }
+      });
+    });
+    const remaining = (await stub.accounts()).accounts;
+    expect(remaining).toHaveLength(2);
+    expect(remaining.every((account) => account.active)).toBe(true);
+    expect((await stub.balanceHistory({})).observations).toHaveLength(2);
+    expect((await stub.netWorth()).totals).toEqual([
+      {
+        currency: "USD",
+        amount: "7103.09",
+      },
+    ]);
   });
   it("retains daily observations after eviction and replaces same-day readings", async () => {
     const stub = testStore();
