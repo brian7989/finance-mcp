@@ -16,7 +16,7 @@ export async function htmlResponse(
   );
   headers.set("x-frame-options", "DENY");
   headers.set("x-content-type-options", "nosniff");
-  headers.set("referrer-policy", "no-referrer");
+  headers.set("referrer-policy", "same-origin");
   return new Response(rendered.toString(), {
     status,
     headers,

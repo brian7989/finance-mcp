@@ -38,6 +38,7 @@ describe("escaped financial templates", () => {
         ],
       ),
     );
+    expect(response.headers.get("referrer-policy")).toBe("same-origin");
     const body = await response.text();
     expect(body).not.toContain("<script>");
     expect(body).toContain("&lt;script&gt;");
