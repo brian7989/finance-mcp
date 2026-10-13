@@ -6,6 +6,11 @@ import {
   completePlaidLink,
   linkBenepass,
 } from "../modules/finance/connections/link.js";
+import {
+  beginUmbConnection,
+  finishUmbConnection,
+  requestUmbCode,
+} from "../modules/finance/connections/umb.js";
 import type { FinanceContext } from "../modules/finance/context.js";
 import { PreferenceSchema, QuerySchema } from "../modules/finance/schemas.js";
 import { summarizeNetWorth } from "../modules/finance/services/queries.js";
@@ -91,6 +96,20 @@ export class FinanceStore extends DurableObject<Env> {
   }
   async setPreference(input: unknown): Promise<void> {
     savePreference(this.context.db, PreferenceSchema.parse(input));
+  }
+  async beginUmbLogin(flowId: string, input: unknown) {
+    const methods = await beginUmbConnection(this.context, flowId, input);
+    if (!methods.length) {
+      await this.scheduleSync();
+    }
+    return methods;
+  }
+  async sendUmbCode(flowId: string, method: string): Promise<void> {
+    await requestUmbCode(this.context, flowId, method);
+  }
+  async completeUmbLogin(flowId: string, code: string): Promise<void> {
+    await finishUmbConnection(this.context, flowId, code);
+    await this.scheduleSync();
   }
   async linkBenepass(): Promise<void> {
     await linkBenepass(this.context);

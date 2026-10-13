@@ -17,6 +17,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "../../components/ui/dialog";
+import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 
 export function ConnectDialog({ data }: { data: ConnectionsData }) {
@@ -37,7 +38,7 @@ export function ConnectDialog({ data }: { data: ConnectionsData }) {
         </DialogHeader>
         <Accordion type="single" collapsible defaultValue="plaid">
           <PlaidOption csrf={data.csrf} />
-          {data.benepassEmail && <OtherInstitutions data={data} />}
+          <OtherInstitutions data={data} />
         </Accordion>
       </DialogContent>
     </Dialog>
@@ -60,7 +61,8 @@ function OtherInstitutions({ data }: { data: ConnectionsData }) {
   return (
     <>
       <p className="pt-5 text-xs text-muted-foreground">Other institutions</p>
-      <BenepassOption data={data} />
+      {data.benepassEmail && <BenepassOption data={data} />}
+      <UmbOption csrf={data.csrf} />
     </>
   );
 }
@@ -81,6 +83,48 @@ function BenepassOption({ data }: { data: ConnectionsData }) {
             <Checkbox name="registration" value="approved" className="mt-0.5" />
             Set up email login if needed.
           </Label>
+        </ActionForm>
+      </AccordionContent>
+    </AccordionItem>
+  );
+}
+
+function UmbOption({ csrf }: { csrf: string }) {
+  return (
+    <AccordionItem value="umb">
+      <AccordionTrigger className="hover:no-underline">UMB HSA</AccordionTrigger>
+      <AccordionContent>
+        <ActionForm
+          action="/connections/umb/start"
+          csrf={csrf}
+          label="Connect UMB"
+          className="space-y-4"
+        >
+          <div className="space-y-2">
+            <Label htmlFor="umb-username">Username</Label>
+            <Input
+              id="umb-username"
+              name="username"
+              autoComplete="username"
+              maxLength={200}
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="umb-password">Password</Label>
+            <Input
+              id="umb-password"
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              maxLength={500}
+              required
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Your password is used once and never stored. UMB may require verification or a new
+            sign-in when its session expires.
+          </p>
         </ActionForm>
       </AccordionContent>
     </AccordionItem>

@@ -3,6 +3,7 @@ import type { Connection } from "../finance/schemas.js";
 import { resolveBenepassProvider } from "./benepass/provider.js";
 import { resolvePlaidProvider } from "./plaid/provider.js";
 import type { FinanceProvider } from "./provider.js";
+import { resolveUmbProvider } from "./umb/provider.js";
 
 type ProviderDefinition = {
   resolve: (context: FinanceContext, connection: Connection) => Promise<FinanceProvider>;
@@ -10,6 +11,10 @@ type ProviderDefinition = {
 };
 
 const providers = {
+  umb: {
+    resolve: resolveUmbProvider,
+    supportsReconnect: false,
+  },
   benepass: {
     resolve: resolveBenepassProvider,
     supportsReconnect: false,

@@ -8,6 +8,7 @@ export const CurrencySchema = z.string().min(1).max(20);
 export const ProviderSchema = z.enum([
   "plaid",
   "benepass",
+  "umb",
 ]);
 export const CapabilitySchema = z.enum([
   "balances",

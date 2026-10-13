@@ -5,16 +5,19 @@ import {
   completeBenepassLogin,
   completePlaidLink,
   completeSignIn,
+  completeUmbLogin,
   disconnect,
   receivePlaidWebhook,
   refresh,
   savePreference,
+  sendUmbCode,
   showConnections,
   showConsentPage,
   signIn,
   signOut,
   startBenepassLogin,
   startPlaidLink,
+  startUmbLogin,
   submitConsent,
 } from "./handlers.js";
 import {
@@ -56,6 +59,9 @@ const ownerFormHandlers = webFactory.createHandlers(
 );
 
 function registerConnectionRoutes(app: WebRouter): void {
+  app.post("/connections/umb/start", ...ownerFormHandlers, startUmbLogin);
+  app.post("/connections/umb/code", ...ownerFormHandlers, sendUmbCode);
+  app.post("/connections/umb/complete", ...ownerFormHandlers, completeUmbLogin);
   app.get("/connections/plaid/complete", requireOwner, completePlaidLink);
   app.post("/connections/plaid/start", ...ownerFormHandlers, startPlaidLink);
   app.post("/connections/benepass/start", ...ownerFormHandlers, startBenepassLogin);

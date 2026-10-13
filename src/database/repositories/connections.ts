@@ -150,3 +150,22 @@ export function restoreConnection(db: FinanceDatabase, expected: Connection): vo
     .where(and(eq(connections.id, expected.id), eq(connections.revision, expected.revision)))
     .run();
 }
+
+export function updateCredential(
+  db: FinanceDatabase,
+  expected: Connection,
+  credential: string,
+): void {
+  db.update(connections)
+    .set({
+      credential,
+    })
+    .where(
+      and(
+        eq(connections.id, expected.id),
+        eq(connections.revision, expected.revision),
+        ne(connections.status, "disconnected"),
+      ),
+    )
+    .run();
+}

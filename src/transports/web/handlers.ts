@@ -11,6 +11,7 @@ import type { WebContext } from "./context.js";
 import { approveOrDeny, completeIdentity, showConsent } from "./oauth.js";
 import { benepassCodePage, connectionsPage, signedOutPage } from "./pages/connections.js";
 import { htmlResponse, interactiveHtmlResponse } from "./pages/layout.js";
+import { umbCodePage, umbMethodPage } from "./pages/umb.js";
 
 export async function signIn(context: WebContext): Promise<Response> {
   return beginBrowserSignIn(context.var.configuration);
@@ -114,4 +115,28 @@ function redirectToConnections(): Response {
 
 export async function receivePlaidWebhook(context: WebContext): Promise<Response> {
   return handlePlaidWebhook(context.req.raw, context.env);
+}
+
+export async function startUmbLogin(context: WebContext): Promise<Response> {
+  const methods = await ownerStore(context.env).beginUmbLogin(context.var.owner.flowId, {
+    username: requiredField(context.var.form, "username"),
+    password: requiredField(context.var.form, "password"),
+  });
+  return methods.length
+    ? htmlResponse(umbMethodPage(context.var.owner, methods))
+    : redirectToConnections();
+}
+export async function sendUmbCode(context: WebContext): Promise<Response> {
+  await ownerStore(context.env).sendUmbCode(
+    context.var.owner.flowId,
+    requiredField(context.var.form, "method"),
+  );
+  return htmlResponse(umbCodePage(context.var.owner));
+}
+export async function completeUmbLogin(context: WebContext): Promise<Response> {
+  await ownerStore(context.env).completeUmbLogin(
+    context.var.owner.flowId,
+    readLoginCode(context.var.form),
+  );
+  return redirectToConnections();
 }

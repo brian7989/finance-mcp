@@ -29,6 +29,7 @@
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "drizzle-orm": "0.45.4",
+    "entities": "8.1.0",
     "hono": "4.13.13",
     "jose": "6.2.12",
     "lucide-react": "1.55.0",
@@ -38,6 +39,7 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "tailwind-merge": "3.7.0",
+    "tough-cookie": "6.0.2",
     "zod": "4.4.3"
   },
   "devDependencies": {

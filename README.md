@@ -45,13 +45,14 @@ Personal Finance MCP gives a compatible AI assistant one place to read your acco
 | **History** | Daily balance observations, banking transactions, and supported investment activity. |
 | **Account preferences** | Custom names and separate choices for inclusion in net worth and spending analysis. |
 
-Holdings explain an investment balance; they are never added to that balance again. Benepass HSA cash and investments appear separately. Missing balances stay unknown, and account suffixes appear only when verified numbers are available.
+Holdings explain an investment balance; they are never added to that balance again. Benepass and UMB HSA cash and investments appear separately. Missing balances stay unknown, and account suffixes appear only when verified numbers are available.
 
 ## Connect your institutions
 
 | Integration | Coverage |
 | --- | --- |
 | [**Plaid**](https://plaid.com/docs/) | Supported banks, credit cards, brokerages, and retirement accounts. Available data depends on the institution, login portal, and enabled products. |
+| **UMB HSA** | Direct HSA cash, investment balances, and available cash transaction history. Sign in with your UMB credentials and complete verification when required. |
 | **Benepass** | Direct HSA cash, investment balances, and holdings. Transaction history is not currently normalized. |
 
 Choose **Connect institution** in the workspace. Plaid is the primary flow; direct integrations live under **Other institutions**. Connection management, login codes, and account settings stay in the browser.

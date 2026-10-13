@@ -54,3 +54,9 @@ Balance history starts with the first successful observation, keeping the latest
 Internal account IDs preserve preferences and history through ordinary refreshes and runtime restarts. A newly created Plaid Item is a separate connection; accounts are not guessed to match by name or mask.
 
 Disconnecting stops synchronization and revokes Plaid access when the provider is reachable, while preserving history. If revocation fails, retry disconnecting. Free-tier quotas are finite; no paid plan upgrade is configured. Keep real credentials out of local tests and fixtures.
+
+## UMB HSA
+
+Connect UMB under **Other institutions** in the workspace. No additional secrets or Cloudflare resources are needed. Your password is used for sign-in only; the connector stores the resulting session encrypted. Complete email or SMS verification when requested. If UMB expires the session, sign in again from the connect dialog.
+
+UMB cash and investment balances are separated without counting the combined total twice. Cash transactions backfill the years available through the portal, within a bounded refresh budget. Holdings and investment activity are not currently supported.
